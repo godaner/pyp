@@ -20,7 +20,6 @@ class Srv:
         self.conn_id_mapping_user_conn = {}
         self.client_id_mapping_user_conn = {}
         self.client_id_mapping_listen_port = {}
-        self.app_close_conn = {}
 
     def __str__(self):
         return str(self.conf)
@@ -51,11 +50,9 @@ class Srv:
                 t.start()
             except (SystemExit, KeyboardInterrupt, GeneratorExit) as e:
                 self.logger.error("exit handle client conn: {0}!".format(e))
-                self.__when_client_conn_close__(client_id)
-                return
+                raise e
             except Exception as e:
                 self.logger.error("accept client conn fail: {0}!".format(e))
-                self.__when_client_conn_close__(client_id)
 
     def __when_client_conn_close__(self, client_id: str):
         listens = self.client_id_mapping_listen_port.pop(client_id)
@@ -66,25 +63,28 @@ class Srv:
             user_conns[user_conn].close()
 
     def __handle_client_conn__(self, client_conn: socket.socket, client_id: str):
-        while 1:
-            len_bs = client_conn.recv(32)
-            len_int = int.from_bytes(len_bs, 'big')
-            bs = client_conn.recv(len_int)
-            pkg = protocol.un_serialize(bs)
-            self.logger.info("recv type: {0}!".format(pkg.ty))
-            if pkg.ty == protocol.TYPE_CLIENT_HELLO_REQ:
-                self.__handle_client_hello_req__(client_conn, client_id, pkg)
-                continue
-            if pkg.ty == protocol.TYPE_USER_CREATE_CONN_RESP:
-                self.__handle_user_create_conn_resp__(client_conn, client_id, pkg)
-                continue
-            if pkg.ty == protocol.TYPE_CLOSE_USER_CONN_REQ:
-                self.__handle_close_user_conn__(client_conn, client_id, pkg)
-                continue
-            if pkg.ty == protocol.TYPE_PAYLOAD:
-                self.__handle_payload__(client_conn, client_id, pkg)
-                continue
-            self.logger.error("recv client pkg type error!")
+        try:
+            while 1:
+                len_bs = client_conn.recv(32)
+                if len(len_bs) == 0:
+                    raise Exception("EOF")
+                len_int = int.from_bytes(len_bs, 'big')
+                bs = client_conn.recv(len_int)
+                pkg = protocol.un_serialize(bs)
+                self.logger.info("recv type: {0}!".format(pkg.ty))
+                if pkg.ty == protocol.TYPE_CLIENT_HELLO_REQ:
+                    self.__handle_client_hello_req__(client_conn, client_id, pkg)
+                    continue
+                if pkg.ty == protocol.TYPE_USER_CREATE_CONN_RESP:
+                    self.__handle_user_create_conn_resp__(client_conn, client_id, pkg)
+                    continue
+                if pkg.ty == protocol.TYPE_PAYLOAD:
+                    self.__handle_payload__(client_conn, client_id, pkg)
+                    continue
+                self.logger.error("recv client pkg type error!")
+        except BaseException as e:
+            self.logger.error("client conn recv err: {0}!".format(e))
+            self.__when_client_conn_close__(client_id)
 
     def __handle_user_create_conn_resp__(self, client_conn: socket.socket, client_id: str, pkg: protocol.package):
         self.user_conn_create_resp_pkg[pkg.conn_id] = pkg
@@ -119,16 +119,16 @@ class Srv:
             client_conn.send(bs)
 
     def __listen_port__(self, client_conn, client_id: str, listen, listen_port):
-        while 1:
-            try:
+        try:
+            while 1:
                 user_conn, addr = listen.accept()
                 self.logger.info("accept user conn addr: {0}".format(addr))
                 t = threading.Thread(target=self.__handle_user_conn__,
                                      args=(client_conn, client_id, user_conn, listen_port))
                 t.start()
-            except BaseException as e:
-                self.logger.info("accept user conn err: {0}".format(e))
-                self.client_id_mapping_listen_port[client_id].pop(id(listen))
+        except BaseException as e:
+            self.logger.info("accept user conn err: {0}".format(e))
+            # self.client_id_mapping_listen_port[client_id].pop(id(listen))
 
     def __handle_user_conn__(self, client_conn: socket.socket, client_id: str, user_conn: socket.socket, listen_port):
         conn_id = str(uuid.uuid4())
@@ -162,25 +162,7 @@ class Srv:
                 client_conn.send(len(bs).to_bytes(32, 'big'))
                 client_conn.send(bs)
         except BaseException as e:
-            # raise e
             self.logger.error("user conn recv err: {0}!".format(e))
-        finally:
-            self.client_id_mapping_user_conn[client_id].pop(id(user_conn))
-            try:
-                self.app_close_conn.pop(conn_id)
-            except BaseException as e:
-                try:
-                    user_conn.close()
-                    bs = protocol.serialize(
-                        protocol.package(ty=protocol.TYPE_CLOSE_APP_CONN_REQ, conn_id=conn_id, error=""))
-                    client_conn.send(len(bs).to_bytes(32, 'big'))
-                    client_conn.send(bs)
-                except BaseException as e:
-                    self.logger.error("close user conn err: {0}!".format(e))
-
-    def __handle_close_user_conn__(self, client_conn: socket.socket, client_id: str, pkg: protocol.package):
-        self.app_close_conn[pkg.conn_id] = True
-        self.conn_id_mapping_user_conn[pkg.conn_id].close()
 
     def __handle_payload__(self, client_conn: socket.socket, client_id: str, pkg: protocol.package):
         conn_id = pkg.conn_id
@@ -204,3 +186,4 @@ if __name__ == "__main__":
     except Exception as e:
         logger.info("server err: {0}!".format(e))
         logger.info("server err: {0}!".format(traceback.format_exc()))
+        sys.exit()

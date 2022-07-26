@@ -4,8 +4,6 @@ TYPE_CLIENT_HELLO_REQ = "client hello req"
 TYPE_CLIENT_HELLO_RESP = "client hello resp"
 TYPE_USER_CREATE_CONN_REQ = "user create conn req"
 TYPE_USER_CREATE_CONN_RESP = "user create conn resp"
-TYPE_CLOSE_APP_CONN_REQ = "close app conn req"
-TYPE_CLOSE_USER_CONN_REQ = "close user conn req"
 TYPE_PAYLOAD = "payload"
 
 
