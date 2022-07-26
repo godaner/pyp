@@ -1,0 +1,8 @@
+server: 10.0.0.69:2222
+app:
+  ssh:
+    inner: 10.0.0.69:22
+    outter: 22
+  pg:
+    inner: 10.0.0.69:5431
+    outter: 5431
