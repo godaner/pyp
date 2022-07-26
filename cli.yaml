@@ -1,8 +1,14 @@
-server: 10.0.0.69:2222
+server:
+  host: 0.0.0.0
+  port: 33340
 app:
-  ssh:
-    inner: 10.0.0.69:22
-    outter: 22
-  pg:
-    inner: 10.0.0.69:5431
-    outter: 5431
+  - inner:
+      host: 10.0.0.69
+      port: 22
+    outer:
+      port: 122
+  - inner:
+      host: 10.2.0.172
+      port: 22
+    outer:
+      port: 222
