@@ -96,10 +96,12 @@ class Srv:
         self.client_id_mapping_client_conn[client_id] = client_conn
         try:
             while 1:
-                len_bs = client_conn.recv(32)
+                len_bs = sock.recv_full(client_conn, 32)
                 if len(len_bs) == 0:
                     raise Exception("EOF")
                 len_int = int.from_bytes(len_bs, 'big')
+                if len_int == 0:
+                    continue
                 bs = sock.recv_full(client_conn, len_int)
                 self.logger.debug("recv len: {0}, len(bs): {1}".format(len_int, len(bs)))
                 pkg = protocol.un_serialize(bs)

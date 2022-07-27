@@ -44,9 +44,9 @@ class Cli:
             protocol.package(ty=protocol.TYPE_CLIENT_HELLO_REQ, listen_ports=listen_ports, error=""))
         client_conn.send(len(bs).to_bytes(32, 'big') + bs)
         # wait client hello resp
-        len_bs = client_conn.recv(32)
+        len_bs = sock.recv_full(client_conn, 32)
         len_int = int.from_bytes(len_bs, 'big')
-        bs = client_conn.recv(len_int)
+        bs = sock.recv_full(client_conn, len_int)
         pkg = protocol.un_serialize(bs)
         if pkg.ty != protocol.TYPE_CLIENT_HELLO_RESP:
             self.logger.error("recv resp is not client hello resp")
@@ -57,7 +57,7 @@ class Cli:
         self.logger.info("recv client hello resp!")
         try:
             while 1:
-                len_bs = client_conn.recv(32)
+                len_bs = sock.recv_full(client_conn, 32)
                 if len(len_bs) == 0:
                     raise Exception("EOF")
                 len_int = int.from_bytes(len_bs, 'big')
