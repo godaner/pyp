@@ -1,3 +1,3 @@
 # pyp
 
-python proxy connection to inner network
+proxy connection to inner network
