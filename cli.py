@@ -11,9 +11,8 @@ import sock
 
 
 class Cli:
-    def __init__(self, config_file: str):
-        with open(config_file, 'r') as f:
-            self.conf = yaml.safe_load(f)
+    def __init__(self, conf):
+        self.conf = conf
         self.logger = logging.getLogger()
         self.outer_port_mapping_inner = {}
         self.conn_id_mapping_app_conn = {}
@@ -63,7 +62,7 @@ class Cli:
                     raise Exception("EOF")
                 len_int = int.from_bytes(len_bs, 'big')
                 bs = sock.recv_full(client_conn, len_int)
-                self.logger.info("recv len: {0}, len(bs): {1}".format(len_int, len(bs)))
+                self.logger.debug("recv len: {0}, len(bs): {1}".format(len_int, len(bs)))
                 pkg = protocol.un_serialize(bs)
                 if pkg.ty == protocol.TYPE_USER_CREATE_CONN_REQ:
                     self.logger.info("recv type: {0}!".format(pkg.ty))
@@ -121,7 +120,7 @@ class Cli:
                     raise Exception("EOF")
                 bs = protocol.serialize(
                     protocol.package(ty=protocol.TYPE_PAYLOAD, payload=bs, conn_id=conn_id, error=""))
-                self.logger.info("send len: {0}".format(len(bs)))
+                self.logger.debug("send len: {0}".format(len(bs)))
                 client_conn.send(len(bs).to_bytes(32, 'big') + bs)
         except BaseException as e:
             self.logger.error("app conn recv err: {0}!".format(e))
@@ -146,11 +145,19 @@ if __name__ == "__main__":
         config_file = "./cli.yaml"
     else:
         config_file = sys.argv[1]
-    logging.basicConfig(level=logging.INFO,
+    with open(config_file, 'r') as f:
+        conf = yaml.safe_load(f)
+    lev = logging.INFO
+    try:
+        debug = conf['debug']
+    except BaseException as e:
+        debug = False
+    if debug:
+        lev = logging.DEBUG
+    logging.basicConfig(level=lev,
                         format='%(asctime)s %(levelname)s %(pathname)s:%(lineno)d %(thread)s %(message)s')
     logger = logging.getLogger()
-    logger.info("use config file: {0}!".format(config_file))
-    cli = Cli(config_file)
+    cli = Cli(conf)
     logger.info("cli info: {0}!".format(cli))
     try:
         cli.start()

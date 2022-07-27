@@ -12,3 +12,4 @@ app:
       port: 22
     outer:
       port: 175
+debug: false

@@ -12,9 +12,8 @@ import sock
 
 
 class Srv:
-    def __init__(self, config_file: str):
-        with open(config_file, 'r') as f:
-            self.conf = yaml.safe_load(f)
+    def __init__(self, conf):
+        self.conf = conf
         self.logger = logging.getLogger()
         self.user_conn_create_resp_event = {}
         self.user_conn_create_resp_pkg = {}
@@ -102,7 +101,7 @@ class Srv:
                     raise Exception("EOF")
                 len_int = int.from_bytes(len_bs, 'big')
                 bs = sock.recv_full(client_conn, len_int)
-                self.logger.info("recv len: {0}, len(bs): {1}".format(len_int, len(bs)))
+                self.logger.debug("recv len: {0}, len(bs): {1}".format(len_int, len(bs)))
                 pkg = protocol.un_serialize(bs)
                 if pkg.ty == protocol.TYPE_CLIENT_HELLO_REQ:
                     self.logger.info("recv type: {0}!".format(pkg.ty))
@@ -234,7 +233,7 @@ class Srv:
                     raise Exception("EOF")
                 bs = protocol.serialize(
                     protocol.package(ty=protocol.TYPE_PAYLOAD, payload=bs, conn_id=conn_id, error=""))
-                self.logger.info("send len: {0}".format(len(bs)))
+                self.logger.debug("send len: {0}".format(len(bs)))
                 client_conn.send(len(bs).to_bytes(32, 'big') + bs)
         except BaseException as e:
             self.logger.error("user conn recv err: {0}!".format(e))
@@ -262,13 +261,21 @@ if __name__ == "__main__":
         config_file = "./srv.yaml"
     else:
         config_file = sys.argv[1]
-    logging.basicConfig(level=logging.INFO,
+    with open(config_file, 'r') as f:
+        conf = yaml.safe_load(f)
+    lev = logging.INFO
+    try:
+        debug = conf['debug']
+    except BaseException as e:
+        debug = False
+    if debug:
+        lev = logging.DEBUG
+    logging.basicConfig(level=lev,
                         format='%(asctime)s %(levelname)s %(pathname)s:%(lineno)d %(thread)s %(message)s')
     logger = logging.getLogger()
-    logger.info("use config file: {0}!".format(config_file))
-    cli = Srv(config_file)
-    logger.info("server info: {0}!".format(cli))
+    srv = Srv(conf)
+    logger.info("server info: {0}!".format(srv))
     try:
-        cli.start()
+        srv.start()
     except BaseException as e:
         logger.info("server err:{0} {1}!".format(e, traceback.format_exc()))
