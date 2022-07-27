@@ -73,17 +73,20 @@ class Cli:
                     continue
                 self.logger.error("recv server pkg type error!")
         except BaseException as e:
+            self.logger.error("client conn recv err: {0}!".format(e))
             try:
                 client_conn.close()
             except BaseException as e:
                 ...
             self.__when_client_conn_close__()
-            self.logger.error("client conn recv err: {0}!".format(e))
             raise e
 
     def __when_client_conn_close__(self):
+        app_conns = []
         for conn_id in self.conn_id_mapping_app_conn:
-            self.conn_id_mapping_app_conn[conn_id].close()
+            app_conns.append(self.conn_id_mapping_app_conn[conn_id])
+        for app_conn in app_conns:
+            app_conn.close()
 
     def __handle_user_create_conn_req__(self, client_conn: socket.socket, pkg: protocol.package):
         error = ""
@@ -91,7 +94,6 @@ class Cli:
             inner = self.outer_port_mapping_inner[pkg.listen_ports[0]]
             app_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             app_conn.connect((inner['host'], inner['port']))
-            self.conn_id_mapping_app_conn[pkg.conn_id] = app_conn
             t = threading.Thread(target=self.__handle_app_conn__, args=(client_conn, pkg.conn_id, app_conn))
             t.start()
         except BaseException as e:
@@ -104,6 +106,7 @@ class Cli:
             client_conn.send(bs)
 
     def __handle_app_conn__(self, client_conn: socket.socket, conn_id, app_conn):
+        self.conn_id_mapping_app_conn[conn_id] = app_conn
         try:
             while 1:
                 bs = app_conn.recv(1024)
@@ -114,11 +117,15 @@ class Cli:
                 client_conn.send(len(bs).to_bytes(32, 'big'))
                 client_conn.send(bs)
         except BaseException as e:
+            self.logger.error("app conn recv err: {0}!".format(e))
             try:
                 app_conn.close()
             except BaseException as e:
                 ...
-            self.logger.error("app conn recv err: {0}!".format(e))
+            try:
+                self.conn_id_mapping_app_conn.pop(conn_id)
+            except BaseException as e:
+                ...
 
     def __handle_payload__(self, client_conn: socket.socket, pkg: protocol.package):
         conn_id = pkg.conn_id

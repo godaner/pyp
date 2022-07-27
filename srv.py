@@ -94,6 +94,7 @@ class Srv:
                 self.logger.error("recv client pkg type error!")
         except BaseException as e:
             self.logger.error("client conn recv err: {0}!".format(e))
+            self.logger.error("client conn recv err: {0}!".format(traceback.format_exc()))
             try:
                 client_conn.close()
             except BaseException as e:
@@ -105,9 +106,12 @@ class Srv:
             self.__when_client_conn_close__(client_id)
 
     def __handle_user_create_conn_resp__(self, client_conn: socket.socket, client_id: str, pkg: protocol.package):
-        self.user_conn_create_resp_pkg[pkg.conn_id] = pkg
-        wait = self.user_conn_create_resp_event[pkg.conn_id]
-        wait.set()
+        try:
+            self.user_conn_create_resp_pkg[pkg.conn_id] = pkg
+            wait = self.user_conn_create_resp_event[pkg.conn_id]
+            wait.set()
+        except BaseException as e:
+            self.logger.error("can not find create user conn resp event: {0}!".format(e))
 
     def __handle_client_hello_req__(self, client_conn: socket.socket, client_id: str, pkg: protocol.package):
         if not len(pkg.listen_ports):
@@ -146,11 +150,11 @@ class Srv:
                                      args=(client_conn, client_id, user_conn, listen_port))
                 t.start()
         except BaseException as e:
+            self.logger.info("accept user conn err: {0}".format(e))
             try:
                 listen.close()
             except BaseException as e:
                 ...
-            self.logger.info("accept user conn err: {0}".format(e))
             # self.client_id_mapping_listen_port[client_id].pop(id(listen))
 
     def __handle_user_conn__(self, client_conn: socket.socket, client_id: str, user_conn: socket.socket, listen_port):
@@ -165,15 +169,32 @@ class Srv:
         client_conn.send(bs)
         # wait user conn create resp
         try:
-            event.wait(1)
+            event.wait(100)
         except BaseException as e:
+            try:
+                user_conn.close()
+            except BaseException as e:
+                ...
             self.logger.error("wait user conn create resp err: {0}".format(e))
             raise e
         finally:
             self.user_conn_create_resp_event.pop(conn_id)
-            pkg = self.user_conn_create_resp_pkg.pop(conn_id)
-            if pkg.error != "":
-                raise Exception("user conn create resp error: {0}".format(pkg.error))
+            try:
+                pkg = self.user_conn_create_resp_pkg.pop(conn_id)
+                if pkg.error != "":
+                    try:
+                        user_conn.close()
+                    except BaseException as e:
+                        ...
+                    self.logger.error("wait user conn create resp pkg err: {0}".format(pkg.error))
+                    raise Exception("user conn create resp error: {0}".format(pkg.error))
+            except BaseException as e:
+                try:
+                    user_conn.close()
+                except BaseException as e:
+                    ...
+                self.logger.error("can not find user conn create resp pkg: {0}".format(e))
+                raise Exception("can not find user conn create resp pkg: {0}".format(e))
         self.conn_id_mapping_user_conn[conn_id] = user_conn
         try:
             while 1:
@@ -185,16 +206,23 @@ class Srv:
                 client_conn.send(len(bs).to_bytes(32, 'big'))
                 client_conn.send(bs)
         except BaseException as e:
+            self.logger.error("user conn recv err: {0}!".format(e))
             try:
                 user_conn.close()
             except BaseException as e:
                 ...
-            self.logger.error("user conn recv err: {0}!".format(e))
+            try:
+                self.conn_id_mapping_user_conn.pop(conn_id)
+            except BaseException as e:
+                ...
 
     def __handle_payload__(self, client_conn: socket.socket, client_id: str, pkg: protocol.package):
         conn_id = pkg.conn_id
-        user_conn = self.conn_id_mapping_user_conn[conn_id]
-        user_conn.send(pkg.payload)
+        try:
+            user_conn = self.conn_id_mapping_user_conn[conn_id]
+            user_conn.send(pkg.payload)
+        except BaseException as e:
+            self.logger.error("forward payload to user conn err: {0}!".format(e))
 
 
 if __name__ == "__main__":
