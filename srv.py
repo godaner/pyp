@@ -8,6 +8,7 @@ import uuid
 import yaml
 
 import protocol
+import sock
 
 
 class Srv:
@@ -100,7 +101,8 @@ class Srv:
                 if len(len_bs) == 0:
                     raise Exception("EOF")
                 len_int = int.from_bytes(len_bs, 'big')
-                bs = client_conn.recv(len_int)
+                bs = sock.recv_full(client_conn, len_int)
+                self.logger.info("recv len: {0}, len(bs): {1}".format(len_int, len(bs)))
                 pkg = protocol.un_serialize(bs)
                 if pkg.ty == protocol.TYPE_CLIENT_HELLO_REQ:
                     self.logger.info("recv type: {0}!".format(pkg.ty))
@@ -232,6 +234,7 @@ class Srv:
                     raise Exception("EOF")
                 bs = protocol.serialize(
                     protocol.package(ty=protocol.TYPE_PAYLOAD, payload=bs, conn_id=conn_id, error=""))
+                self.logger.info("send len: {0}".format(len(bs)))
                 client_conn.send(len(bs).to_bytes(32, 'big') + bs)
         except BaseException as e:
             self.logger.error("user conn recv err: {0}!".format(e))

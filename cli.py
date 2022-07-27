@@ -7,6 +7,7 @@ import traceback
 import yaml
 
 import protocol
+import sock
 
 
 class Cli:
@@ -61,7 +62,8 @@ class Cli:
                 if len(len_bs) == 0:
                     raise Exception("EOF")
                 len_int = int.from_bytes(len_bs, 'big')
-                bs = client_conn.recv(len_int)
+                bs = sock.recv_full(client_conn, len_int)
+                self.logger.info("recv len: {0}, len(bs): {1}".format(len_int, len(bs)))
                 pkg = protocol.un_serialize(bs)
                 if pkg.ty == protocol.TYPE_USER_CREATE_CONN_REQ:
                     self.logger.info("recv type: {0}!".format(pkg.ty))
@@ -99,7 +101,6 @@ class Cli:
             inner = self.outer_port_mapping_inner[pkg.listen_ports[0]]
             app_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             app_conn.connect((inner['host'], inner['port']))
-
             bs = protocol.serialize(
                 protocol.package(ty=protocol.TYPE_USER_CREATE_CONN_RESP, conn_id=pkg.conn_id, error=""))
             client_conn.send(len(bs).to_bytes(32, 'big') + bs)
@@ -120,6 +121,7 @@ class Cli:
                     raise Exception("EOF")
                 bs = protocol.serialize(
                     protocol.package(ty=protocol.TYPE_PAYLOAD, payload=bs, conn_id=conn_id, error=""))
+                self.logger.info("send len: {0}".format(len(bs)))
                 client_conn.send(len(bs).to_bytes(32, 'big') + bs)
         except BaseException as e:
             self.logger.error("app conn recv err: {0}!".format(e))
