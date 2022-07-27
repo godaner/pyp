@@ -75,8 +75,9 @@ class Cli:
         except BaseException as e:
             self.logger.error("client conn recv err: {0}!".format(e))
             try:
+                client_conn.shutdown(socket.SHUT_RDWR)
                 client_conn.close()
-            except BaseException as e:
+            except BaseException as ee:
                 ...
             self.__when_client_conn_close__()
             raise e
@@ -86,7 +87,12 @@ class Cli:
         for conn_id in self.conn_id_mapping_app_conn:
             app_conns.append(self.conn_id_mapping_app_conn[conn_id])
         for app_conn in app_conns:
-            app_conn.close()
+            self.logger.info("closing client conn: {0}".format(str(app_conn)))
+            try:
+                app_conn.shutdown(socket.SHUT_RDWR)
+                app_conn.close()
+            except BaseException as e:
+                ...
 
     def __handle_user_create_conn_req__(self, client_conn: socket.socket, pkg: protocol.package):
         error = ""
@@ -117,6 +123,7 @@ class Cli:
         except BaseException as e:
             self.logger.error("app conn recv err: {0}!".format(e))
             try:
+                app_conn.shutdown(socket.SHUT_RDWR)
                 app_conn.close()
             except BaseException as e:
                 ...
@@ -145,5 +152,4 @@ if __name__ == "__main__":
     try:
         cli.start()
     except BaseException as e:
-        logger.info("cli err: {0}!".format(e))
-        logger.info("cli err: {0}!".format(traceback.format_exc()))
+        logger.info("cli err: {0} {1}!".format(e, traceback.format_exc()))

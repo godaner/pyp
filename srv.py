@@ -49,7 +49,11 @@ class Srv:
                 t.start()
             except BaseException as e:
                 self.logger.error("exit handle client conn: {0}!".format(e))
-                s.close()
+                try:
+                    s.shutdown(socket.SHUT_RDWR)
+                    s.close()
+                except BaseException as e:
+                    ...
                 self.__when_listen_conn_close__()
                 raise e
 
@@ -58,15 +62,32 @@ class Srv:
         for client_id in self.client_id_mapping_client_conn:
             client_ids.append(client_id)
         for client_id in client_ids:
-            self.client_id_mapping_client_conn[client_id].close()
+            client_conn = self.client_id_mapping_client_conn[client_id]
+            self.logger.info("closing client conn: {0}".format(str(client_conn)))
+            try:
+                client_conn.shutdown(socket.SHUT_RDWR)
+                client_conn.close()
+            except BaseException as e:
+                ...
 
     def __when_client_conn_close__(self, client_id: str):
+
         listens = self.client_id_mapping_listen_port.pop(client_id)
         for listen in listens:
-            listens[listen].close()
+            self.logger.info("closing listen_port: {0}".format(str(listens[listen])))
+            try:
+                listens[listen].shutdown(socket.SHUT_RDWR)
+                listens[listen].close()
+            except BaseException as e:
+                ...
         user_conns = self.client_id_mapping_user_conn.pop(client_id)
         for user_conn in user_conns:
-            user_conns[user_conn].close()
+            self.logger.info("closing listen_port: {0}".format(str(user_conns[user_conn])))
+            try:
+                user_conns[user_conn].shutdown(socket.SHUT_RDWR)
+                user_conns[user_conn].close()
+            except BaseException as e:
+                ...
 
     def __handle_client_conn__(self, client_conn: socket.socket):
         client_id = str(uuid.uuid4())
@@ -98,8 +119,9 @@ class Srv:
                 self.logger.error("recv client pkg type error!")
         except BaseException as e:
             self.logger.error("client conn recv err: {0}!".format(e))
-            self.logger.error("client conn recv err: {0}!".format(traceback.format_exc()))
+            # self.logger.error("client conn recv err: {0}!".format(traceback.format_exc()))
             try:
+                client_conn.shutdown(socket.SHUT_RDWR)
                 client_conn.close()
             except BaseException as e:
                 ...
@@ -137,6 +159,7 @@ class Srv:
                 t.start()
         except BaseException as e:
             for listen_port in listen_ports:
+                listen_ports[listen_port].shutdown(socket.SHUT_RDWR)
                 listen_ports[listen_port].close()
             self.logger.error("listen ports err: {0}!".format(e))
             error = str(e)
@@ -153,8 +176,9 @@ class Srv:
                                      args=(client_conn, client_id, user_conn, listen_port))
                 t.start()
         except BaseException as e:
-            self.logger.info("accept user conn err: {0}".format(e))
+            self.logger.info("accept user conn err, listen_port is: {0}, err is: {1}".format(listen_port, e))
             try:
+                listen.shutdown(socket.SHUT_RDWR)
                 listen.close()
             except BaseException as e:
                 ...
@@ -174,6 +198,7 @@ class Srv:
             event.wait(100)
         except BaseException as e:
             try:
+                user_conn.shutdown(socket.SHUT_RDWR)
                 user_conn.close()
             except BaseException as e:
                 ...
@@ -185,6 +210,7 @@ class Srv:
                 pkg = self.user_conn_create_resp_pkg.pop(conn_id)
                 if pkg.error != "":
                     try:
+                        user_conn.shutdown(socket.SHUT_RDWR)
                         user_conn.close()
                     except BaseException as e:
                         ...
@@ -192,6 +218,7 @@ class Srv:
                     raise Exception("user conn create resp error: {0}".format(pkg.error))
             except BaseException as e:
                 try:
+                    user_conn.shutdown(socket.SHUT_RDWR)
                     user_conn.close()
                 except BaseException as e:
                     ...
@@ -209,6 +236,7 @@ class Srv:
         except BaseException as e:
             self.logger.error("user conn recv err: {0}!".format(e))
             try:
+                user_conn.shutdown(socket.SHUT_RDWR)
                 user_conn.close()
             except BaseException as e:
                 ...
@@ -240,5 +268,4 @@ if __name__ == "__main__":
     try:
         cli.start()
     except BaseException as e:
-        logger.info("server err: {0}!".format(e))
-        logger.info("server err: {0}!".format(traceback.format_exc()))
+        logger.info("server err:{0} {1}!".format(e, traceback.format_exc()))
