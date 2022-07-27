@@ -18,6 +18,7 @@ class Srv:
         self.user_conn_create_resp_event = {}
         self.user_conn_create_resp_pkg = {}
         self.conn_id_mapping_user_conn = {}
+        self.client_id_mapping_client_conn = {}
         self.client_id_mapping_user_conn = {}
         self.client_id_mapping_listen_port = {}
 
@@ -27,32 +28,37 @@ class Srv:
     def start(self):
         self.logger.info("start client!")
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             host = self.conf["server"]["host"]
         except Exception as e:
             self.logger.info("get host from config fail: {0}".format(e))
-            return
+            raise e
         try:
             port = self.conf["server"]["port"]
         except Exception as e:
             self.logger.info("get port from config fail: {0}".format(e))
-            return
+            raise e
         s.bind((host, port))
         s.listen()
         while 1:
-            client_id = str(uuid.uuid4())
-            self.client_id_mapping_listen_port[client_id] = {}
-            self.client_id_mapping_user_conn[client_id] = {}
             try:
                 client_conn, addr = s.accept()
                 self.logger.info("accept client conn addr: {0}".format(addr))
-                t = threading.Thread(target=self.__handle_client_conn__, args=(client_conn, client_id))
+                t = threading.Thread(target=self.__handle_client_conn__, args=(client_conn))
                 t.start()
-            except (SystemExit, KeyboardInterrupt, GeneratorExit) as e:
+            except BaseException as e:
                 self.logger.error("exit handle client conn: {0}!".format(e))
+                s.close()
+                self.__when_listen_conn_close__()
                 raise e
-            except Exception as e:
-                self.logger.error("accept client conn fail: {0}!".format(e))
+
+    def __when_listen_conn_close__(self):
+        client_ids = []
+        for client_id in self.client_id_mapping_client_conn:
+            client_ids.append(client_id)
+        for client_id in client_ids:
+            self.client_id_mapping_client_conn[client_id].close()
 
     def __when_client_conn_close__(self, client_id: str):
         listens = self.client_id_mapping_listen_port.pop(client_id)
@@ -62,7 +68,11 @@ class Srv:
         for user_conn in user_conns:
             user_conns[user_conn].close()
 
-    def __handle_client_conn__(self, client_conn: socket.socket, client_id: str):
+    def __handle_client_conn__(self, client_conn: socket.socket):
+        client_id = str(uuid.uuid4())
+        self.client_id_mapping_listen_port[client_id] = {}
+        self.client_id_mapping_user_conn[client_id] = {}
+        self.client_id_mapping_client_conn[client_id] = client_conn
         try:
             while 1:
                 len_bs = client_conn.recv(32)
@@ -84,6 +94,14 @@ class Srv:
                 self.logger.error("recv client pkg type error!")
         except BaseException as e:
             self.logger.error("client conn recv err: {0}!".format(e))
+            try:
+                client_conn.close()
+            except BaseException as e:
+                ...
+            try:
+                self.client_id_mapping_client_conn.pop(client_id)
+            except BaseException as e:
+                ...
             self.__when_client_conn_close__(client_id)
 
     def __handle_user_create_conn_resp__(self, client_conn: socket.socket, client_id: str, pkg: protocol.package):
@@ -99,6 +117,7 @@ class Srv:
         try:
             for listen_port in pkg.listen_ports:
                 listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                listen.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 listen.bind(("0.0.0.0", listen_port))
                 listen.listen()
                 listen_ports[listen_port] = listen
@@ -183,7 +202,6 @@ if __name__ == "__main__":
     logger.info("server info: {0}!".format(cli))
     try:
         cli.start()
-    except Exception as e:
+    except BaseException as e:
         logger.info("server err: {0}!".format(e))
         logger.info("server err: {0}!".format(traceback.format_exc()))
-        sys.exit()

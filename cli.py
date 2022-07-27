@@ -129,5 +129,3 @@ if __name__ == "__main__":
     except BaseException as e:
         logger.info("cli err: {0}!".format(e))
         logger.info("cli err: {0}!".format(traceback.format_exc()))
-    finally:
-        sys.exit()
