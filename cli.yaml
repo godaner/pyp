@@ -6,9 +6,9 @@ app:
       host: 10.2.0.172
       port: 22
     outer:
-      port: 122
+      port: 172
   - inner:
-      host: 10.2.1.111
+      host: 10.2.0.175
       port: 22
     outer:
-      port: 222
+      port: 175

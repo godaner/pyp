@@ -95,19 +95,20 @@ class Cli:
                 ...
 
     def __handle_user_create_conn_req__(self, client_conn: socket.socket, pkg: protocol.package):
-        error = ""
         try:
             inner = self.outer_port_mapping_inner[pkg.listen_ports[0]]
             app_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             app_conn.connect((inner['host'], inner['port']))
+
+            bs = protocol.serialize(
+                protocol.package(ty=protocol.TYPE_USER_CREATE_CONN_RESP, conn_id=pkg.conn_id, error=""))
+            client_conn.send(len(bs).to_bytes(32, 'big') + bs)
             t = threading.Thread(target=self.__handle_app_conn__, args=(client_conn, pkg.conn_id, app_conn))
             t.start()
         except BaseException as e:
             self.logger.error("connect to app err: {0}!".format(e))
-            error = str(e)
-        finally:
             bs = protocol.serialize(
-                protocol.package(ty=protocol.TYPE_USER_CREATE_CONN_RESP, conn_id=pkg.conn_id, error=error))
+                protocol.package(ty=protocol.TYPE_USER_CREATE_CONN_RESP, conn_id=pkg.conn_id, error=str(e)))
             client_conn.send(len(bs).to_bytes(32, 'big') + bs)
 
     def __handle_app_conn__(self, client_conn: socket.socket, conn_id, app_conn):

@@ -52,7 +52,7 @@ class Srv:
                 try:
                     s.shutdown(socket.SHUT_RDWR)
                     s.close()
-                except BaseException as e:
+                except BaseException as ee:
                     ...
                 self.__when_listen_conn_close__()
                 raise e
@@ -195,7 +195,7 @@ class Srv:
         client_conn.send(len(bs).to_bytes(32, 'big') + bs)
         # wait user conn create resp
         try:
-            event.wait(100)
+            event.wait(60)
         except BaseException as e:
             try:
                 user_conn.shutdown(socket.SHUT_RDWR)
@@ -220,7 +220,7 @@ class Srv:
                 try:
                     user_conn.shutdown(socket.SHUT_RDWR)
                     user_conn.close()
-                except BaseException as e:
+                except BaseException as ee:
                     ...
                 self.logger.error("can not find user conn create resp pkg: {0}".format(e))
                 raise Exception("can not find user conn create resp pkg: {0}".format(e))
