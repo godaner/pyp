@@ -81,14 +81,18 @@ class Srv:
                 len_int = int.from_bytes(len_bs, 'big')
                 bs = client_conn.recv(len_int)
                 pkg = protocol.un_serialize(bs)
-                self.logger.info("recv type: {0}!".format(pkg.ty))
                 if pkg.ty == protocol.TYPE_CLIENT_HELLO_REQ:
-                    self.__handle_client_hello_req__(client_conn, client_id, pkg)
+                    self.logger.info("recv type: {0}!".format(pkg.ty))
+                    threading.Thread(target=self.__handle_client_hello_req__,
+                                     args=(client_conn, client_id, pkg)).start()
                     continue
                 if pkg.ty == protocol.TYPE_USER_CREATE_CONN_RESP:
-                    self.__handle_user_create_conn_resp__(client_conn, client_id, pkg)
+                    self.logger.info("recv type: {0}!".format(pkg.ty))
+                    threading.Thread(target=self.__handle_user_create_conn_resp__,
+                                     args=(client_conn, client_id, pkg)).start()
                     continue
                 if pkg.ty == protocol.TYPE_PAYLOAD:
+                    # threading.Thread(target=self.__handle_payload__, args=(client_conn, client_id, pkg)).start()
                     self.__handle_payload__(client_conn, client_id, pkg)
                     continue
                 self.logger.error("recv client pkg type error!")
@@ -138,8 +142,7 @@ class Srv:
             error = str(e)
         finally:
             bs = protocol.serialize(protocol.package(ty=protocol.TYPE_CLIENT_HELLO_RESP, error=error))
-            client_conn.send(len(bs).to_bytes(32, 'big'))
-            client_conn.send(bs)
+            client_conn.send(len(bs).to_bytes(32, 'big') + bs)
 
     def __listen_port__(self, client_conn, client_id: str, listen: socket.socket, listen_port):
         try:
@@ -165,8 +168,7 @@ class Srv:
         bs = protocol.serialize(
             protocol.package(ty=protocol.TYPE_USER_CREATE_CONN_REQ, conn_id=conn_id, listen_ports=[listen_port],
                              error=""))
-        client_conn.send(len(bs).to_bytes(32, 'big'))
-        client_conn.send(bs)
+        client_conn.send(len(bs).to_bytes(32, 'big') + bs)
         # wait user conn create resp
         try:
             event.wait(100)
@@ -203,8 +205,7 @@ class Srv:
                     raise Exception("EOF")
                 bs = protocol.serialize(
                     protocol.package(ty=protocol.TYPE_PAYLOAD, payload=bs, conn_id=conn_id, error=""))
-                client_conn.send(len(bs).to_bytes(32, 'big'))
-                client_conn.send(bs)
+                client_conn.send(len(bs).to_bytes(32, 'big') + bs)
         except BaseException as e:
             self.logger.error("user conn recv err: {0}!".format(e))
             try:

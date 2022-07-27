@@ -42,8 +42,7 @@ class Cli:
         client_conn.connect((host, port))
         bs = protocol.serialize(
             protocol.package(ty=protocol.TYPE_CLIENT_HELLO_REQ, listen_ports=listen_ports, error=""))
-        client_conn.send(len(bs).to_bytes(32, 'big'))
-        client_conn.send(bs)
+        client_conn.send(len(bs).to_bytes(32, 'big') + bs)
         # wait client hello resp
         len_bs = client_conn.recv(32)
         len_int = int.from_bytes(len_bs, 'big')
@@ -64,11 +63,12 @@ class Cli:
                 len_int = int.from_bytes(len_bs, 'big')
                 bs = client_conn.recv(len_int)
                 pkg = protocol.un_serialize(bs)
-                self.logger.info("recv type: {0}!".format(pkg.ty))
                 if pkg.ty == protocol.TYPE_USER_CREATE_CONN_REQ:
-                    self.__handle_user_create_conn_req__(client_conn, pkg)
+                    self.logger.info("recv type: {0}!".format(pkg.ty))
+                    threading.Thread(target=self.__handle_user_create_conn_req__, args=(client_conn, pkg)).start()
                     continue
                 if pkg.ty == protocol.TYPE_PAYLOAD:
+                    # threading.Thread(target=self.__handle_payload__, args=(client_conn, pkg)).start()
                     self.__handle_payload__(client_conn, pkg)
                     continue
                 self.logger.error("recv server pkg type error!")
@@ -102,8 +102,7 @@ class Cli:
         finally:
             bs = protocol.serialize(
                 protocol.package(ty=protocol.TYPE_USER_CREATE_CONN_RESP, conn_id=pkg.conn_id, error=error))
-            client_conn.send(len(bs).to_bytes(32, 'big'))
-            client_conn.send(bs)
+            client_conn.send(len(bs).to_bytes(32, 'big') + bs)
 
     def __handle_app_conn__(self, client_conn: socket.socket, conn_id, app_conn):
         self.conn_id_mapping_app_conn[conn_id] = app_conn
@@ -114,8 +113,7 @@ class Cli:
                     raise Exception("EOF")
                 bs = protocol.serialize(
                     protocol.package(ty=protocol.TYPE_PAYLOAD, payload=bs, conn_id=conn_id, error=""))
-                client_conn.send(len(bs).to_bytes(32, 'big'))
-                client_conn.send(bs)
+                client_conn.send(len(bs).to_bytes(32, 'big') + bs)
         except BaseException as e:
             self.logger.error("app conn recv err: {0}!".format(e))
             try:
