@@ -45,7 +45,7 @@ class Srv:
             try:
                 client_conn, addr = s.accept()
                 self.logger.info("accept client conn addr: {0}".format(addr))
-                t = threading.Thread(target=self.__handle_client_conn__, args=(client_conn))
+                t = threading.Thread(target=self.__handle_client_conn__, args=(client_conn,))
                 t.start()
             except BaseException as e:
                 self.logger.error("exit handle client conn: {0}!".format(e))
@@ -137,7 +137,7 @@ class Srv:
             client_conn.send(len(bs).to_bytes(32, 'big'))
             client_conn.send(bs)
 
-    def __listen_port__(self, client_conn, client_id: str, listen, listen_port):
+    def __listen_port__(self, client_conn, client_id: str, listen: socket.socket, listen_port):
         try:
             while 1:
                 user_conn, addr = listen.accept()
@@ -146,6 +146,10 @@ class Srv:
                                      args=(client_conn, client_id, user_conn, listen_port))
                 t.start()
         except BaseException as e:
+            try:
+                listen.close()
+            except BaseException as e:
+                ...
             self.logger.info("accept user conn err: {0}".format(e))
             # self.client_id_mapping_listen_port[client_id].pop(id(listen))
 
@@ -181,6 +185,10 @@ class Srv:
                 client_conn.send(len(bs).to_bytes(32, 'big'))
                 client_conn.send(bs)
         except BaseException as e:
+            try:
+                user_conn.close()
+            except BaseException as e:
+                ...
             self.logger.error("user conn recv err: {0}!".format(e))
 
     def __handle_payload__(self, client_conn: socket.socket, client_id: str, pkg: protocol.package):

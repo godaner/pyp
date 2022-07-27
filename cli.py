@@ -51,10 +51,10 @@ class Cli:
         pkg = protocol.un_serialize(bs)
         if pkg.ty != protocol.TYPE_CLIENT_HELLO_RESP:
             self.logger.error("recv resp is not client hello resp")
-            return
+            raise Exception("recv resp is not client hello resp")
         if pkg.error != "":
             self.logger.error("recv client hello resp err: {0}!".format(pkg.error))
-            return
+            raise Exception("recv client hello resp err: {0}!".format(pkg.error))
         self.logger.info("recv client hello resp!")
         try:
             while 1:
@@ -73,8 +73,17 @@ class Cli:
                     continue
                 self.logger.error("recv server pkg type error!")
         except BaseException as e:
+            try:
+                client_conn.close()
+            except BaseException as e:
+                ...
+            self.__when_client_conn_close__()
             self.logger.error("client conn recv err: {0}!".format(e))
             raise e
+
+    def __when_client_conn_close__(self):
+        for conn_id in self.conn_id_mapping_app_conn:
+            self.conn_id_mapping_app_conn[conn_id].close()
 
     def __handle_user_create_conn_req__(self, client_conn: socket.socket, pkg: protocol.package):
         error = ""
@@ -94,7 +103,7 @@ class Cli:
             client_conn.send(len(bs).to_bytes(32, 'big'))
             client_conn.send(bs)
 
-    def __handle_app_conn__(self, client_conn, conn_id, app_conn):
+    def __handle_app_conn__(self, client_conn: socket.socket, conn_id, app_conn):
         try:
             while 1:
                 bs = app_conn.recv(1024)
@@ -105,6 +114,10 @@ class Cli:
                 client_conn.send(len(bs).to_bytes(32, 'big'))
                 client_conn.send(bs)
         except BaseException as e:
+            try:
+                app_conn.close()
+            except BaseException as e:
+                ...
             self.logger.error("app conn recv err: {0}!".format(e))
 
     def __handle_payload__(self, client_conn: socket.socket, pkg: protocol.package):
