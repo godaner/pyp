@@ -17,8 +17,10 @@ class Srv:
         self.logger = logging.getLogger()
         self.user_conn_create_resp_event = {}
         self.user_conn_create_resp_pkg = {}
+        self.conn_id_mapping_client_app_conn = {}
         self.conn_id_mapping_user_conn = {}
         self.client_id_mapping_client_conn = {}
+        self.client_id_mapping_client_app_conn = {}
         self.client_id_mapping_user_conn = {}
         self.client_id_mapping_listen_port = {}
 
@@ -71,7 +73,6 @@ class Srv:
                 ...
 
     def __when_client_conn_close__(self, client_id: str):
-
         listens = self.client_id_mapping_listen_port.pop(client_id)
         for listen in listens:
             self.logger.info("closing listen_port: {0}".format(str(listens[listen])))
@@ -82,18 +83,23 @@ class Srv:
                 ...
         user_conns = self.client_id_mapping_user_conn.pop(client_id)
         for user_conn in user_conns:
-            self.logger.info("closing listen_port: {0}".format(str(user_conns[user_conn])))
+            self.logger.info("closing user conn: {0}".format(str(user_conns[user_conn])))
             try:
                 user_conns[user_conn].shutdown(socket.SHUT_RDWR)
                 user_conns[user_conn].close()
             except BaseException as e:
                 ...
+        client_app_conns = self.client_id_mapping_client_app_conn.pop(client_id)
+        for client_app_conn in client_app_conns:
+            self.logger.info("closing client app conn: {0}".format(str(client_app_conns[client_app_conn])))
+            try:
+                client_app_conns[client_app_conn].shutdown(socket.SHUT_RDWR)
+                client_app_conns[client_app_conn].close()
+            except BaseException as e:
+                ...
 
     def __handle_client_conn__(self, client_conn: socket.socket):
-        client_id = str(uuid.uuid4())
-        self.client_id_mapping_listen_port[client_id] = {}
-        self.client_id_mapping_user_conn[client_id] = {}
-        self.client_id_mapping_client_conn[client_id] = client_conn
+        client_id = ""
         try:
             while 1:
                 len_bs = sock.recv_full(client_conn, 32)
@@ -107,17 +113,22 @@ class Srv:
                 pkg = protocol.un_serialize(bs)
                 if pkg.ty == protocol.TYPE_CLIENT_HELLO_REQ:
                     self.logger.info("recv type: {0}!".format(pkg.ty))
+                    client_id = str(uuid.uuid4())
+                    self.client_id_mapping_listen_port[client_id] = {}
+                    self.client_id_mapping_user_conn[client_id] = {}
+                    self.client_id_mapping_client_app_conn[client_id] = {}
+                    self.client_id_mapping_client_conn[client_id] = client_conn
                     threading.Thread(target=self.__handle_client_hello_req__,
                                      args=(client_conn, client_id, pkg)).start()
                     continue
                 if pkg.ty == protocol.TYPE_USER_CREATE_CONN_RESP:
                     self.logger.info("recv type: {0}!".format(pkg.ty))
                     threading.Thread(target=self.__handle_user_create_conn_resp__,
-                                     args=(client_conn, client_id, pkg)).start()
+                                     args=(client_conn, pkg)).start()
                     continue
                 if pkg.ty == protocol.TYPE_PAYLOAD:
                     # threading.Thread(target=self.__handle_payload__, args=(client_conn, client_id, pkg)).start()
-                    self.__handle_payload__(client_conn, client_id, pkg)
+                    self.__handle_payload__(client_conn, pkg)
                     continue
                 self.logger.error("recv client pkg type error!")
         except BaseException as e:
@@ -129,13 +140,21 @@ class Srv:
             except BaseException as e:
                 ...
             try:
+                self.client_id_mapping_client_app_conn[client_id].pop(client_id)
+            except BaseException as e:
+                ...
+            try:
                 self.client_id_mapping_client_conn.pop(client_id)
             except BaseException as e:
                 ...
-            self.__when_client_conn_close__(client_id)
+            if client_id != "":
+                self.__when_client_conn_close__(client_id)
 
-    def __handle_user_create_conn_resp__(self, client_conn: socket.socket, client_id: str, pkg: protocol.package):
+    def __handle_user_create_conn_resp__(self, client_app_conn: socket.socket, pkg: protocol.package):
         try:
+            if pkg.error == "":
+                self.client_id_mapping_client_app_conn[pkg.client_id][pkg.conn_id] = client_app_conn
+                self.conn_id_mapping_client_app_conn[pkg.conn_id] = client_app_conn
             self.user_conn_create_resp_pkg[pkg.conn_id] = pkg
             wait = self.user_conn_create_resp_event[pkg.conn_id]
             wait.set()
@@ -193,7 +212,8 @@ class Srv:
         event = threading.Event()
         self.user_conn_create_resp_event[conn_id] = event
         bs = protocol.serialize(
-            protocol.package(ty=protocol.TYPE_USER_CREATE_CONN_REQ, conn_id=conn_id, listen_ports=[listen_port],
+            protocol.package(ty=protocol.TYPE_USER_CREATE_CONN_REQ, client_id=client_id, conn_id=conn_id,
+                             listen_ports=[listen_port],
                              error=""))
         client_conn.send(len(bs).to_bytes(32, 'big') + bs)
         # wait user conn create resp
@@ -227,7 +247,9 @@ class Srv:
                     ...
                 self.logger.error("can not find user conn create resp pkg: {0}".format(e))
                 raise Exception("can not find user conn create resp pkg: {0}".format(e))
+        # create user conn success
         self.conn_id_mapping_user_conn[conn_id] = user_conn
+        client_app_conn = self.conn_id_mapping_client_app_conn[conn_id]
         try:
             while 1:
                 bs = user_conn.recv(1024)
@@ -236,9 +258,18 @@ class Srv:
                 bs = protocol.serialize(
                     protocol.package(ty=protocol.TYPE_PAYLOAD, payload=bs, conn_id=conn_id, error=""))
                 self.logger.debug("send len: {0}".format(len(bs)))
-                client_conn.send(len(bs).to_bytes(32, 'big') + bs)
+                client_app_conn.send(len(bs).to_bytes(32, 'big') + bs)
         except BaseException as e:
             self.logger.error("user conn recv err: {0}!".format(e))
+            try:
+                client_app_conn.shutdown(socket.SHUT_RDWR)
+                client_app_conn.close()
+            except BaseException as e:
+                ...
+            try:
+                self.conn_id_mapping_client_app_conn.pop(conn_id)
+            except BaseException as e:
+                ...
             try:
                 user_conn.shutdown(socket.SHUT_RDWR)
                 user_conn.close()
@@ -249,7 +280,7 @@ class Srv:
             except BaseException as e:
                 ...
 
-    def __handle_payload__(self, client_conn: socket.socket, client_id: str, pkg: protocol.package):
+    def __handle_payload__(self, client_conn: socket.socket, pkg: protocol.package):
         conn_id = pkg.conn_id
         try:
             user_conn = self.conn_id_mapping_user_conn[conn_id]
