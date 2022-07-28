@@ -123,8 +123,18 @@ class Cli:
 
             # client app conn
             client_app_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client_app_conn.connect((self.server_host, self.server_port))
-
+            try:
+                client_app_conn.connect((self.server_host, self.server_port))
+            except BaseException as e:
+                try:
+                    app_conn.close()
+                except BaseException as ee:
+                    ...
+                try:
+                    client_app_conn.close()
+                except BaseException as ee:
+                    ...
+                raise e
             bs = protocol.serialize(
                 protocol.package(ty=protocol.TYPE_USER_CREATE_CONN_RESP, client_id=pkg.client_id, conn_id=pkg.conn_id,
                                  error=""))
