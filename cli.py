@@ -45,9 +45,9 @@ class Cli:
         client_conn.connect((self.server_host, self.server_port))
         bs = protocol.serialize(
             protocol.package(ty=protocol.TYPE_CLIENT_HELLO_REQ, listen_ports=listen_ports, error=""))
-        client_conn.send(len(bs).to_bytes(32, 'big') + bs)
+        client_conn.send(len(bs).to_bytes(4, 'big') + bs)
         # wait client hello resp
-        len_bs = sock.recv_full(client_conn, 32)
+        len_bs = sock.recv_full(client_conn, 4)
         len_int = int.from_bytes(len_bs, 'big')
         bs = sock.recv_full(client_conn, len_int)
         pkg = protocol.un_serialize(bs)
@@ -60,7 +60,7 @@ class Cli:
         self.logger.info("recv client hello resp!")
         try:
             while 1:
-                len_bs = sock.recv_full(client_conn, 32)
+                len_bs = sock.recv_full(client_conn, 4)
                 if len(len_bs) == 0:
                     raise Exception("EOF")
                 len_int = int.from_bytes(len_bs, 'big')
@@ -78,6 +78,7 @@ class Cli:
                 self.logger.error("recv server pkg type error!")
         except BaseException as e:
             self.logger.error("client conn recv err: {0}!".format(e))
+            self.logger.debug("client conn recv err: {0}!".format(traceback.format_exc()))
             try:
                 client_conn.shutdown(socket.SHUT_RDWR)
                 client_conn.close()
@@ -123,7 +124,7 @@ class Cli:
             bs = protocol.serialize(
                 protocol.package(ty=protocol.TYPE_USER_CREATE_CONN_RESP, client_id=pkg.client_id, conn_id=pkg.conn_id,
                                  error=""))
-            client_app_conn.send(len(bs).to_bytes(32, 'big') + bs)
+            client_app_conn.send(len(bs).to_bytes(4, 'big') + bs)
 
             # handle app conn
             threading.Thread(target=self.__handle_client_app_conn__,
@@ -135,13 +136,13 @@ class Cli:
             bs = protocol.serialize(
                 protocol.package(ty=protocol.TYPE_USER_CREATE_CONN_RESP, client_id=pkg.client_id, conn_id=pkg.conn_id,
                                  error=str(e)))
-            client_conn.send(len(bs).to_bytes(32, 'big') + bs)
+            client_conn.send(len(bs).to_bytes(4, 'big') + bs)
 
     def __handle_client_app_conn__(self, client_app_conn: socket.socket, conn_id, app_conn):
         self.conn_id_mapping_client_app_conn[conn_id] = client_app_conn
         try:
             while 1:
-                len_bs = sock.recv_full(client_app_conn, 32)
+                len_bs = sock.recv_full(client_app_conn, 4)
                 if len(len_bs) == 0:
                     raise Exception("EOF")
                 len_int = int.from_bytes(len_bs, 'big')
@@ -154,6 +155,7 @@ class Cli:
                 self.logger.error("recv server pkg type error!")
         except BaseException as e:
             self.logger.error("client app conn recv err: {0}!".format(e))
+            self.logger.debug("client app conn recv err: {0}!".format(traceback.format_exc()))
             try:
                 app_conn.shutdown(socket.SHUT_RDWR)
                 app_conn.close()
@@ -183,7 +185,7 @@ class Cli:
                 bs = protocol.serialize(
                     protocol.package(ty=protocol.TYPE_PAYLOAD, payload=bs, conn_id=conn_id, error=""))
                 self.logger.debug("send len: {0}".format(len(bs)))
-                client_app_conn.send(len(bs).to_bytes(32, 'big') + bs)
+                client_app_conn.send(len(bs).to_bytes(4, 'big') + bs)
         except BaseException as e:
             self.logger.error("app conn recv err: {0}!".format(e))
             try:

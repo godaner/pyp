@@ -102,7 +102,7 @@ class Srv:
         client_id = ""
         try:
             while 1:
-                len_bs = sock.recv_full(client_conn, 32)
+                len_bs = sock.recv_full(client_conn, 4)
                 if len(len_bs) == 0:
                     raise Exception("EOF")
                 len_int = int.from_bytes(len_bs, 'big')
@@ -133,7 +133,7 @@ class Srv:
                 self.logger.error("recv client pkg type error!")
         except BaseException as e:
             self.logger.error("client conn recv err: {0}!".format(e))
-            # self.logger.error("client conn recv err: {0}!".format(traceback.format_exc()))
+            self.logger.debug("client conn recv err: {0}!".format(traceback.format_exc()))
             try:
                 client_conn.shutdown(socket.SHUT_RDWR)
                 client_conn.close()
@@ -187,7 +187,7 @@ class Srv:
             error = str(e)
         finally:
             bs = protocol.serialize(protocol.package(ty=protocol.TYPE_CLIENT_HELLO_RESP, error=error))
-            client_conn.send(len(bs).to_bytes(32, 'big') + bs)
+            client_conn.send(len(bs).to_bytes(4, 'big') + bs)
 
     def __listen_port__(self, client_conn, client_id: str, listen: socket.socket, listen_port):
         try:
@@ -215,7 +215,7 @@ class Srv:
             protocol.package(ty=protocol.TYPE_USER_CREATE_CONN_REQ, client_id=client_id, conn_id=conn_id,
                              listen_ports=[listen_port],
                              error=""))
-        client_conn.send(len(bs).to_bytes(32, 'big') + bs)
+        client_conn.send(len(bs).to_bytes(4, 'big') + bs)
         # wait user conn create resp
         try:
             event.wait(60)
@@ -258,7 +258,7 @@ class Srv:
                 bs = protocol.serialize(
                     protocol.package(ty=protocol.TYPE_PAYLOAD, payload=bs, conn_id=conn_id, error=""))
                 self.logger.debug("send len: {0}".format(len(bs)))
-                client_app_conn.send(len(bs).to_bytes(32, 'big') + bs)
+                client_app_conn.send(len(bs).to_bytes(4, 'big') + bs)
         except BaseException as e:
             self.logger.error("user conn recv err: {0}!".format(e))
             try:
