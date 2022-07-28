@@ -2,6 +2,7 @@ import logging
 import socket
 import sys
 import threading
+import time
 import traceback
 import uuid
 
@@ -308,7 +309,12 @@ if __name__ == "__main__":
     logger = logging.getLogger()
     srv = Srv(conf)
     logger.info("server info: {0}!".format(srv))
-    try:
-        srv.start()
-    except BaseException as e:
-        logger.info("server err:{0} {1}!".format(e, traceback.format_exc()))
+    while 1:
+        try:
+            srv.start()
+        except KeyboardInterrupt as e:
+            raise e
+        except BaseException as e:
+            logger.info("server err:{0} {1}!".format(e, traceback.format_exc()))
+            logger.info("server will start in 5s...")
+            time.sleep(5)

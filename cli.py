@@ -2,6 +2,7 @@ import logging
 import socket
 import sys
 import threading
+import time
 import traceback
 
 import yaml
@@ -230,7 +231,12 @@ if __name__ == "__main__":
     logger = logging.getLogger()
     cli = Cli(conf)
     logger.info("cli info: {0}!".format(cli))
-    try:
-        cli.start()
-    except BaseException as e:
-        logger.info("cli err: {0} {1}!".format(e, traceback.format_exc()))
+    while 1:
+        try:
+            cli.start()
+        except KeyboardInterrupt as e:
+            raise e
+        except BaseException as e:
+            logger.info("cli err: {0} {1}!".format(e, traceback.format_exc()))
+            logger.info("cli will start in 5s...")
+            time.sleep(5)
