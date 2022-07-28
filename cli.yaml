@@ -1,6 +1,7 @@
 server:
   host: 127.0.0.1
   port: 33354
+  secret: xxx
 app:
   - inner:
       host: 10.2.0.172

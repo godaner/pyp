@@ -31,12 +31,17 @@ class Cli:
             self.server_host = self.conf["server"]["host"]
         except Exception as e:
             self.logger.info("get host from config fail: {0}".format(e))
-            return
+            raise e
         try:
             self.server_port = self.conf["server"]["port"]
         except Exception as e:
             self.logger.info("get port from config fail: {0}".format(e))
-            return
+            raise e
+        try:
+            secret = self.conf["server"]["secret"]
+        except Exception as e:
+            self.logger.info("get secret from config fail: {0}".format(e))
+            raise e
         listen_ports = []
         for app in self.conf['app']:
             self.outer_port_mapping_inner[app['outer']['port']] = app['inner']
@@ -44,8 +49,9 @@ class Cli:
         if not len(listen_ports):
             self.logger.error("listen_ports is empty!")
         client_conn.connect((self.server_host, self.server_port))
+        # client hello req
         bs = protocol.serialize(
-            protocol.package(ty=protocol.TYPE_CLIENT_HELLO_REQ, listen_ports=listen_ports, error=""))
+            protocol.package(ty=protocol.TYPE_CLIENT_HELLO_REQ, listen_ports=listen_ports, error="", secret=secret))
         client_conn.send(len(bs).to_bytes(4, 'big') + bs)
         # wait client hello resp
         len_bs = sock.recv_full(client_conn, 4)
@@ -59,6 +65,7 @@ class Cli:
             self.logger.error("recv client hello resp err: {0}!".format(pkg.error))
             raise Exception("recv client hello resp err: {0}!".format(pkg.error))
         self.logger.info("recv client hello resp!")
+        # recv user create conn req
         try:
             while 1:
                 len_bs = sock.recv_full(client_conn, 4)
@@ -72,10 +79,6 @@ class Cli:
                     self.logger.info("recv type: {0}!".format(pkg.ty))
                     threading.Thread(target=self.__handle_user_create_conn_req__, args=(client_conn, pkg)).start()
                     continue
-                # if pkg.ty == protocol.TYPE_PAYLOAD:
-                # threading.Thread(target=self.__handle_payload__, args=(client_conn, pkg)).start()
-                # self.__handle_payload__(client_conn, pkg)
-                # continue
                 self.logger.error("recv server pkg type error!")
         except BaseException as e:
             self.logger.error("client conn recv err: {0}!".format(e))

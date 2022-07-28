@@ -4,7 +4,6 @@ import sys
 import threading
 import time
 import traceback
-import uuid
 
 import yaml
 
@@ -14,6 +13,8 @@ import sock
 
 class Srv:
     def __init__(self, conf):
+        self.id = 0
+        self.secret = ""
         self.conf = conf
         self.logger = logging.getLogger()
         self.user_conn_create_resp_event = {}
@@ -41,6 +42,11 @@ class Srv:
             port = self.conf["server"]["port"]
         except Exception as e:
             self.logger.info("get port from config fail: {0}".format(e))
+            raise e
+        try:
+            self.secret = self.conf["server"]["secret"]
+        except Exception as e:
+            self.logger.info("get secret from config fail: {0}".format(e))
             raise e
         s.bind((host, port))
         s.listen()
@@ -73,7 +79,7 @@ class Srv:
             except BaseException as e:
                 ...
 
-    def __when_client_conn_close__(self, client_id: str):
+    def __when_client_conn_close__(self, client_id: int):
         listens = self.client_id_mapping_listen_port.pop(client_id)
         for listen in listens:
             self.logger.info("closing listen_port: {0}".format(str(listens[listen])))
@@ -114,7 +120,7 @@ class Srv:
                 pkg = protocol.un_serialize(bs)
                 if pkg.ty == protocol.TYPE_CLIENT_HELLO_REQ:
                     self.logger.info("recv type: {0}!".format(pkg.ty))
-                    client_id = str(uuid.uuid4())
+                    client_id = self.__id__()
                     self.client_id_mapping_listen_port[client_id] = {}
                     self.client_id_mapping_user_conn[client_id] = {}
                     self.client_id_mapping_client_app_conn[client_id] = {}
@@ -162,12 +168,14 @@ class Srv:
         except BaseException as e:
             self.logger.error("can not find create user conn resp event: {0}!".format(e))
 
-    def __handle_client_hello_req__(self, client_conn: socket.socket, client_id: str, pkg: protocol.package):
-        if not len(pkg.listen_ports):
-            self.logger.error("listen ports is empty!")
+    def __handle_client_hello_req__(self, client_conn: socket.socket, client_id: int, pkg: protocol.package):
         error = ""
         listen_ports = {}
         try:
+            if not len(pkg.listen_ports):
+                raise Exception("listen ports is empty!")
+            if self.secret != pkg.secret:
+                raise Exception("secret error")
             for listen_port in pkg.listen_ports:
                 listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 listen.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -190,7 +198,7 @@ class Srv:
             bs = protocol.serialize(protocol.package(ty=protocol.TYPE_CLIENT_HELLO_RESP, error=error))
             client_conn.send(len(bs).to_bytes(4, 'big') + bs)
 
-    def __listen_port__(self, client_conn, client_id: str, listen: socket.socket, listen_port):
+    def __listen_port__(self, client_conn, client_id: int, listen: socket.socket, listen_port):
         try:
             while 1:
                 user_conn, addr = listen.accept()
@@ -207,8 +215,27 @@ class Srv:
                 ...
             # self.client_id_mapping_listen_port[client_id].pop(id(listen))
 
-    def __handle_user_conn__(self, client_conn: socket.socket, client_id: str, user_conn: socket.socket, listen_port):
-        conn_id = str(uuid.uuid4())
+    def __id__(self):
+        exec_time = 0
+        while 1:
+            if exec_time >= 65535:
+                raise Exception("can not find new id")
+            if self.id >= 65535:
+                self.id = 0
+            self.id += 1
+            exec_time += 1
+            try:
+                _ = self.conn_id_mapping_user_conn[self.id]
+                continue
+            except KeyError as e:
+                try:
+                    _ = self.client_id_mapping_user_conn[self.id]
+                    continue
+                except KeyError as e:
+                    return self.id
+
+    def __handle_user_conn__(self, client_conn: socket.socket, client_id: int, user_conn: socket.socket, listen_port):
+        conn_id = self.__id__()
         self.client_id_mapping_user_conn[client_id][id(user_conn)] = user_conn
         event = threading.Event()
         self.user_conn_create_resp_event[conn_id] = event
