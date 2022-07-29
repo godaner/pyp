@@ -140,7 +140,6 @@ class Srv:
                                      args=(client_conn, pkg)).start()
                     continue
                 if pkg.ty == protocol.TYPE_PAYLOAD:
-                    # threading.Thread(target=self.__handle_payload__, args=(client_conn, client_id, pkg)).start()
                     self.__handle_payload__(client_conn, pkg)
                     continue
                 self.logger.error("recv client pkg type error!")
@@ -152,11 +151,11 @@ class Srv:
                 client_conn.close()
             except BaseException as e:
                 ...
-            try:
-                self.client_id_mapping_client_conn.pop(client_id)
-            except BaseException as e:
-                ...
             if client_id != "":
+                try:
+                    self.client_id_mapping_client_conn.pop(client_id)
+                except BaseException as e:
+                    ...
                 self.__when_client_conn_close__(client_id)
 
     def __handle_heartbeat_req__(self, client_conn: socket.socket, pkg: protocol.package):
