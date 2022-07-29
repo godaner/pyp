@@ -128,6 +128,11 @@ class Srv:
                     threading.Thread(target=self.__handle_client_hello_req__,
                                      args=(client_conn, client_id, pkg)).start()
                     continue
+                if pkg.ty == protocol.TYPE_HEARTBEAT_REQ:
+                    self.logger.debug("recv type: {0}!".format(pkg.ty))
+                    threading.Thread(target=self.__handle_heartbeat_req__,
+                                     args=(client_conn, pkg)).start()
+                    continue
                 if pkg.ty == protocol.TYPE_USER_CREATE_CONN_RESP:
                     self.logger.info("recv type: {0}!".format(pkg.ty))
                     threading.Thread(target=self.__handle_user_create_conn_resp__,
@@ -156,6 +161,20 @@ class Srv:
                 ...
             if client_id != "":
                 self.__when_client_conn_close__(client_id)
+
+    def __handle_heartbeat_req__(self, client_conn: socket.socket, pkg: protocol.package):
+        try:
+            bs = protocol.serialize(
+                protocol.package(ty=protocol.TYPE_HEARTBEAT_RESP, client_id=pkg.client_id, conn_id=pkg.conn_id,
+                                 error=""))
+            self.logger.debug("send heartbeat resp")
+            client_conn.send(len(bs).to_bytes(4, 'big') + bs)
+        except BaseException as e:
+            self.logger.error("send heartbeat err: {0}".format(e))
+            try:
+                client_conn.close()
+            except BaseException as e:
+                ...
 
     def __handle_user_create_conn_resp__(self, client_app_conn: socket.socket, pkg: protocol.package):
         try:

@@ -2,6 +2,8 @@ TYPE_CLIENT_HELLO_REQ = "client hello req"
 TYPE_CLIENT_HELLO_RESP = "client hello resp"
 TYPE_USER_CREATE_CONN_REQ = "user create conn req"
 TYPE_USER_CREATE_CONN_RESP = "user create conn resp"
+TYPE_HEARTBEAT_REQ = "heartbeat req"
+TYPE_HEARTBEAT_RESP = "heartbeat resp"
 TYPE_PAYLOAD = "payload"
 type_map_bs = {
     TYPE_CLIENT_HELLO_REQ: int(0x01).to_bytes(1, 'big'),
@@ -9,6 +11,8 @@ type_map_bs = {
     TYPE_USER_CREATE_CONN_REQ: int(0x03).to_bytes(1, 'big'),
     TYPE_USER_CREATE_CONN_RESP: int(0x04).to_bytes(1, 'big'),
     TYPE_PAYLOAD: int(0x05).to_bytes(1, 'big'),
+    TYPE_HEARTBEAT_REQ: int(0x06).to_bytes(1, 'big'),
+    TYPE_HEARTBEAT_RESP: int(0x07).to_bytes(1, 'big'),
 }
 bs_map_type = {int.from_bytes(val, 'big'): key for (key, val) in type_map_bs.items()}
 
@@ -90,7 +94,7 @@ def un_serialize(bs) -> package:
     listen_ports_len_bs = bs[:1]
     bs = bs[1:]
     listen_ports_len = int.from_bytes(listen_ports_len_bs, 'big')
-    
+
     listen_ports = []
     for i in range(listen_ports_len):
         listen_port_bs = bs[:4]

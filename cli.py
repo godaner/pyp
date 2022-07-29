@@ -14,12 +14,15 @@ import sock
 class Cli:
     def __init__(self, conf):
         self.conf = conf
+        self.client_ip = 0
         self.server_host = ""
         self.server_port = ""
         self.logger = logging.getLogger()
         self.outer_port_mapping_inner = {}
         self.conn_id_mapping_app_conn = {}
         self.conn_id_mapping_client_app_conn = {}
+        self.heartbeat_event = threading.Event()
+        self.exit_event = threading.Event()
 
     def __str__(self):
         return str(self.conf)
@@ -65,6 +68,10 @@ class Cli:
             self.logger.error("recv client hello resp err: {0}!".format(pkg.error))
             raise Exception("recv client hello resp err: {0}!".format(pkg.error))
         self.logger.info("recv client hello resp!")
+        self.client_ip = pkg.client_id
+        self.exit_event = threading.Event()
+        # send heartbeat
+        threading.Thread(target=self.__heartbeat__, args=(client_conn,)).start()
         # recv user create conn req
         try:
             while 1:
@@ -75,6 +82,10 @@ class Cli:
                 bs = sock.recv_full(client_conn, len_int)
                 self.logger.debug("recv len: {0}, len(bs): {1}".format(len_int, len(bs)))
                 pkg = protocol.un_serialize(bs)
+                if pkg.ty == protocol.TYPE_HEARTBEAT_RESP:
+                    self.logger.debug("recv type: {0}!".format(pkg.ty))
+                    threading.Thread(target=self.__handle_heartbeat_req__, args=()).start()
+                    continue
                 if pkg.ty == protocol.TYPE_USER_CREATE_CONN_REQ:
                     self.logger.info("recv type: {0}!".format(pkg.ty))
                     threading.Thread(target=self.__handle_user_create_conn_req__, args=(client_conn, pkg)).start()
@@ -91,7 +102,34 @@ class Cli:
             self.__when_client_conn_close__()
             raise e
 
+    def __handle_heartbeat_req__(self):
+        self.heartbeat_event.set()
+
+    def __heartbeat__(self, client_conn: socket.socket):
+        try:
+            while 1:
+                self.exit_event.wait(10)
+                if self.exit_event.is_set():
+                    return
+                self.heartbeat_event = threading.Event()
+                bs = protocol.serialize(
+                    protocol.package(ty=protocol.TYPE_HEARTBEAT_REQ, client_id=self.client_ip,
+                                     conn_id=0,
+                                     error=""))
+                self.logger.debug("send heartbeat req")
+                client_conn.send(len(bs).to_bytes(4, 'big') + bs)
+                self.heartbeat_event.wait(10)
+                if not self.heartbeat_event.is_set():
+                    raise Exception("wait heartbeat resp timeout")
+        except BaseException as e:
+            self.logger.error("send heartbeat err: {0}".format(e))
+            try:
+                client_conn.close()
+            except BaseException as e:
+                ...
+
     def __when_client_conn_close__(self):
+        self.exit_event.set()
         app_conns = []
         for conn_id in self.conn_id_mapping_app_conn:
             app_conns.append(self.conn_id_mapping_app_conn[conn_id])
