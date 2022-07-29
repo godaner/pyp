@@ -153,10 +153,6 @@ class Srv:
             except BaseException as e:
                 ...
             try:
-                self.client_id_mapping_client_app_conn[client_id].pop(client_id)
-            except BaseException as e:
-                ...
-            try:
                 self.client_id_mapping_client_conn.pop(client_id)
             except BaseException as e:
                 ...
@@ -187,6 +183,18 @@ class Srv:
             wait.set()
         except BaseException as e:
             self.logger.error("can not find create user conn resp event: {0}!".format(e))
+            try:
+                self.client_id_mapping_client_app_conn[pkg.client_id].pop(pkg.conn_id)
+            except BaseException as ee:
+                ...
+            try:
+                self.conn_id_mapping_client_app_conn.pop(pkg.conn_id)
+            except BaseException as ee:
+                ...
+            try:
+                self.user_conn_create_resp_pkg.pop(pkg.conn_id)
+            except BaseException as ee:
+                ...
 
     def __handle_client_hello_req__(self, client_conn: socket.socket, client_id: int, pkg: protocol.package):
         error = ""
