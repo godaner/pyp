@@ -194,6 +194,10 @@ class Srv:
                 self.user_conn_create_resp_pkg.pop(pkg.conn_id)
             except BaseException as ee:
                 ...
+            try:
+                self.user_conn_create_resp_event.pop(pkg.conn_id)
+            except BaseException as ee:
+                ...
 
     def __handle_client_hello_req__(self, client_conn: socket.socket, client_id: int, pkg: protocol.package):
         error = ""
@@ -273,7 +277,10 @@ class Srv:
         # wait user conn create resp
         try:
             event.wait(10)
-            self.user_conn_create_resp_event.pop(conn_id)
+            try:
+                self.user_conn_create_resp_event.pop(conn_id)
+            except BaseException as e:
+                ...
             if not event.is_set():
                 raise Exception("timeout")
             pkg = self.user_conn_create_resp_pkg.pop(conn_id)
