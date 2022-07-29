@@ -17,6 +17,8 @@ class Srv:
         self.id = 0
         self.secret = ""
         self.conf = conf
+        self.server_host = ""
+        self.server_port = ""
         self.logger = logging.getLogger()
         self.user_conn_create_resp_event = {}
         self.user_conn_create_resp_pkg = {}
@@ -35,12 +37,12 @@ class Srv:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
-            host = self.conf["server"]["host"]
+            self.server_host = self.conf["server"]["host"]
         except Exception as e:
             self.logger.info("get host from config fail: {0}".format(e))
             raise e
         try:
-            port = self.conf["server"]["port"]
+            self.server_port = self.conf["server"]["port"]
         except Exception as e:
             self.logger.info("get port from config fail: {0}".format(e))
             raise e
@@ -49,16 +51,14 @@ class Srv:
         except Exception as e:
             self.logger.info("get secret from config fail: {0}".format(e))
             raise e
-        s.bind((host, port))
+        s.bind((self.server_host, self.server_port))
         s.listen()
         while 1:
             try:
                 client_conn, addr = s.accept()
-                self.logger.info("accept client conn addr: {0}".format(addr))
                 t = threading.Thread(target=self.__handle_client_conn__, args=(client_conn,))
                 t.start()
             except BaseException as e:
-                self.logger.error("exit handle client conn: {0}!".format(e))
                 try:
                     s.shutdown(socket.SHUT_RDWR)
                     s.close()
@@ -73,7 +73,6 @@ class Srv:
             client_ids.append(client_id)
         for client_id in client_ids:
             client_conn = self.client_id_mapping_client_conn[client_id]
-            self.logger.info("closing client conn: {0}".format(str(client_conn)))
             try:
                 client_conn.shutdown(socket.SHUT_RDWR)
                 client_conn.close()
@@ -83,7 +82,6 @@ class Srv:
     def __when_client_conn_close__(self, client_id: int):
         listens = self.client_id_mapping_listen_port.pop(client_id)
         for listen in listens:
-            self.logger.info("closing listen_port: {0}".format(str(listens[listen])))
             try:
                 listens[listen].shutdown(socket.SHUT_RDWR)
                 listens[listen].close()
@@ -91,7 +89,6 @@ class Srv:
                 ...
         user_conns = self.client_id_mapping_user_conns.pop(client_id)
         for user_conn in user_conns:
-            self.logger.info("closing user conn: {0}".format(str(user_conns[user_conn])))
             try:
                 user_conns[user_conn].shutdown(socket.SHUT_RDWR)
                 user_conns[user_conn].close()
@@ -99,7 +96,6 @@ class Srv:
                 ...
         client_app_conns = self.client_id_mapping_client_app_conns.pop(client_id)
         for client_app_conn in client_app_conns:
-            self.logger.info("closing client app conn: {0}".format(str(client_app_conns[client_app_conn])))
             try:
                 client_app_conns[client_app_conn].shutdown(socket.SHUT_RDWR)
                 client_app_conns[client_app_conn].close()
@@ -107,6 +103,7 @@ class Srv:
                 ...
 
     def __handle_client_conn__(self, client_conn: socket.socket):
+        client_conn_addr = client_conn.getsockname()
         client_id = ""
         try:
             while 1:
@@ -144,17 +141,19 @@ class Srv:
                     continue
                 self.logger.error("recv client pkg type error!")
         except BaseException as e:
-            self.logger.error("client conn recv err: {0}!".format(e))
-            self.logger.debug("client conn recv err: {0}!".format(traceback.format_exc()))
             try:
                 client_conn.shutdown(socket.SHUT_RDWR)
                 client_conn.close()
-            except BaseException as e:
+            except BaseException as ee:
                 ...
             if client_id != "":
+                self.logger.error(
+                    "closing client conn {}:{} <-> {}:{}, {}".format(client_conn_addr[0], client_conn_addr[1],
+                                                                     self.server_host,
+                                                                     self.server_port, e))
                 try:
                     self.client_id_mapping_client_conn.pop(client_id)
-                except BaseException as e:
+                except BaseException as ee:
                     ...
                 self.__when_client_conn_close__(client_id)
 
@@ -202,9 +201,10 @@ class Srv:
     def __handle_client_hello_req__(self, client_conn: socket.socket, client_id: int, pkg: protocol.package):
         error = ""
         listen_ports = {}
+        client_conn_addr = client_conn.getpeername()
         try:
             if not len(pkg.listen_ports):
-                raise Exception("listen ports is empty!")
+                raise Exception("listen ports is empty")
             if self.secret != pkg.secret:
                 raise Exception("secret error")
             for listen_port in pkg.listen_ports:
@@ -223,28 +223,36 @@ class Srv:
             for listen_port in listen_ports:
                 listen_ports[listen_port].shutdown(socket.SHUT_RDWR)
                 listen_ports[listen_port].close()
-            self.logger.error("listen ports err: {0}!".format(e))
+            self.logger.error("listen port err: {}, {}!".format(listen_ports, e))
             error = str(e)
         finally:
             bs = protocol.serialize(protocol.package(ty=protocol.TYPE_CLIENT_HELLO_RESP, error=error))
             client_conn.send(len(bs).to_bytes(4, 'big') + bs)
 
+        self.logger.info(
+            "accept client conn {}:{} <-> {}:{}".format(client_conn_addr[0], client_conn_addr[1], self.server_host,
+                                                        self.server_port))
+
     def __listen_port__(self, client_conn, client_id: int, listen: socket.socket, listen_port):
+        self.logger.info(
+            "listen user conn :{}".format(listen_port))
         try:
             while 1:
                 user_conn, addr = listen.accept()
-                self.logger.info("accept user conn addr: {0}".format(addr))
                 t = threading.Thread(target=self.__handle_user_conn__,
                                      args=(client_conn, client_id, user_conn, listen_port))
                 t.start()
         except BaseException as e:
-            self.logger.info("accept user conn err, listen_port is: {0}, err is: {1}".format(listen_port, e))
+            self.logger.error("closing listen user conn :{}, {}".format(listen_port, e))
             try:
                 listen.shutdown(socket.SHUT_RDWR)
                 listen.close()
-            except BaseException as e:
+            except BaseException as ee:
                 ...
-            # self.client_id_mapping_listen_port[client_id].pop(id(listen))
+            try:
+                self.client_id_mapping_listen_port[client_id].pop(id(listen))
+            except BaseException as ee:
+                ...
 
     def __id__(self):
         exec_time = 0
@@ -266,6 +274,9 @@ class Srv:
                     return self.id
 
     def __handle_user_conn__(self, client_conn: socket.socket, client_id: int, user_conn: socket.socket, listen_port):
+        user_conn_addr = user_conn.getpeername()
+        self.logger.info(
+            "accept user conn {}:{} <-> :{}".format(user_conn_addr[0], user_conn_addr[1], listen_port))
         conn_id = self.__id__()
         event = threading.Event()
         self.user_conn_create_resp_event[conn_id] = event
@@ -288,6 +299,8 @@ class Srv:
                 raise Exception(pkg.error)
         except BaseException as e:
             try:
+                self.logger.error(
+                    "closing user conn {}:{} <-> :{}, {}".format(user_conn_addr[0], user_conn_addr[1], listen_port, e))
                 user_conn.shutdown(socket.SHUT_RDWR)
                 user_conn.close()
             except BaseException as e:
@@ -298,6 +311,11 @@ class Srv:
         self.conn_id_mapping_user_conn[conn_id] = user_conn
         self.client_id_mapping_user_conns[client_id][id(user_conn)] = user_conn
         client_app_conn = self.conn_id_mapping_client_app_conn[conn_id]
+        client_app_conn_addr = client_app_conn.getpeername()
+        self.logger.info(
+            "accept client app conn {}:{} <-> {}:{}".format(client_app_conn_addr[0], client_app_conn_addr[1],
+                                                            self.server_host,
+                                                            self.server_port))
         try:
             while 1:
                 bs = user_conn.recv(1024)
@@ -308,7 +326,11 @@ class Srv:
                 self.logger.debug("send len: {0}".format(len(bs)))
                 client_app_conn.send(len(bs).to_bytes(4, 'big') + bs)
         except BaseException as e:
-            self.logger.error("user conn recv err: {0}!".format(e))
+            self.logger.error(
+                "closing user conn {}:{} <-> :{}, {}".format(user_conn_addr[0], user_conn_addr[1], listen_port, e))
+            self.logger.error(
+                "closing client app conn {}:{} <-> {}:{}, {}".format(client_app_conn_addr[0], client_app_conn_addr[1],
+                                                                     self.server_host, self.server_port, e))
             try:
                 client_app_conn.shutdown(socket.SHUT_RDWR)
                 client_app_conn.close()

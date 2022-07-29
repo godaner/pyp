@@ -51,7 +51,7 @@ class Cli:
             self.outer_port_mapping_inner[app['outer']['port']] = app['inner']
             listen_ports.append(app['outer']['port'])
         if not len(listen_ports):
-            self.logger.error("listen_ports is empty!")
+            self.logger.error("listen_ports is empty")
         client_conn.connect((self.server_host, self.server_port))
         # client hello req
         bs = protocol.serialize(
@@ -73,6 +73,11 @@ class Cli:
         self.exit_event = threading.Event()
         # send heartbeat
         threading.Thread(target=self.__heartbeat__, args=(client_conn,)).start()
+        # log
+        client_conn_addr = client_conn.getsockname()
+        self.logger.info(
+            "connect client conn {}:{} <-> {}:{}".format(client_conn_addr[0], client_conn_addr[1], self.server_host,
+                                                         self.server_port))
         # recv user create conn req
         try:
             while 1:
@@ -93,8 +98,8 @@ class Cli:
                     continue
                 self.logger.error("recv server pkg type error!")
         except BaseException as e:
-            self.logger.error("client conn recv err: {0}!".format(e))
-            self.logger.debug("client conn recv err: {0}!".format(traceback.format_exc()))
+            # self.logger.error("client conn recv err: {0}!".format(e))
+            # self.logger.debug("client conn recv err: {0}!".format(traceback.format_exc()))
             try:
                 client_conn.shutdown(socket.SHUT_RDWR)
                 client_conn.close()
@@ -154,12 +159,11 @@ class Cli:
                 ...
 
     def __handle_user_create_conn_req__(self, client_conn: socket.socket, pkg: protocol.package):
+        inner = self.outer_port_mapping_inner[pkg.listen_ports[0]]
         try:
             # app conn
-            inner = self.outer_port_mapping_inner[pkg.listen_ports[0]]
             app_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             app_conn.connect((inner['host'], inner['port']))
-
             # client app conn
             client_app_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
@@ -174,6 +178,7 @@ class Cli:
                 except BaseException as ee:
                     ...
                 raise e
+
             bs = protocol.serialize(
                 protocol.package(ty=protocol.TYPE_USER_CREATE_CONN_RESP, client_id=pkg.client_id, conn_id=pkg.conn_id,
                                  error=""))
@@ -182,16 +187,22 @@ class Cli:
             # handle app conn
             threading.Thread(target=self.__handle_client_app_conn__,
                              args=(client_app_conn, pkg.conn_id, app_conn)).start()
-            threading.Thread(target=self.__handle_app_conn__, args=(client_app_conn, pkg.conn_id, app_conn)).start()
+            threading.Thread(target=self.__handle_app_conn__,
+                             args=(client_app_conn, pkg.conn_id, app_conn, inner)).start()
 
         except BaseException as e:
-            self.logger.error("connect to app err: {0}!".format(e))
+            self.logger.error("connect to app err: {}:{}, {}!".format(inner['host'], inner['port'], e))
             bs = protocol.serialize(
                 protocol.package(ty=protocol.TYPE_USER_CREATE_CONN_RESP, client_id=pkg.client_id, conn_id=pkg.conn_id,
                                  error=str(e)))
             client_conn.send(len(bs).to_bytes(4, 'big') + bs)
 
     def __handle_client_app_conn__(self, client_app_conn: socket.socket, conn_id, app_conn):
+        client_app_conn_addr = client_app_conn.getsockname()
+        self.logger.info(
+            "connect client app conn {}:{} <-> {}:{}".format(client_app_conn_addr[0], client_app_conn_addr[1],
+                                                             self.server_host,
+                                                             self.server_port))
         self.conn_id_mapping_client_app_conn[conn_id] = client_app_conn
         try:
             while 1:
@@ -207,8 +218,10 @@ class Cli:
                     continue
                 self.logger.error("recv server pkg type error!")
         except BaseException as e:
-            self.logger.error("client app conn recv err: {0}!".format(e))
-            self.logger.debug("client app conn recv err: {0}!".format(traceback.format_exc()))
+            self.logger.error(
+                "closing client app conn {}:{} <-> {}:{}, {}".format(client_app_conn_addr[0], client_app_conn_addr[1],
+                                                                     self.server_host,
+                                                                     self.server_port, e))
             try:
                 app_conn.shutdown(socket.SHUT_RDWR)
                 app_conn.close()
@@ -228,7 +241,11 @@ class Cli:
             except BaseException as e:
                 ...
 
-    def __handle_app_conn__(self, client_app_conn: socket.socket, conn_id, app_conn):
+    def __handle_app_conn__(self, client_app_conn: socket.socket, conn_id, app_conn, inner):
+        app_conn_addr = app_conn.getsockname()
+        self.logger.info(
+            "connect app conn {}:{} <-> {}:{}".format(app_conn_addr[0], app_conn_addr[1],
+                                                      inner['host'], inner['port']))
         self.conn_id_mapping_app_conn[conn_id] = app_conn
         try:
             while 1:
@@ -240,7 +257,9 @@ class Cli:
                 self.logger.debug("send len: {0}".format(len(bs)))
                 client_app_conn.send(len(bs).to_bytes(4, 'big') + bs)
         except BaseException as e:
-            self.logger.error("app conn recv err: {0}!".format(e))
+            self.logger.error(
+                "closing app conn {}:{} <-> {}:{}, {}".format(app_conn_addr[0], app_conn_addr[1],
+                                                              inner['host'], inner['port'], e))
             try:
                 app_conn.shutdown(socket.SHUT_RDWR)
                 app_conn.close()
