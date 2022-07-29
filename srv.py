@@ -266,7 +266,13 @@ class Srv:
         client_conn.send(len(bs).to_bytes(4, 'big') + bs)
         # wait user conn create resp
         try:
-            event.wait(60)
+            event.wait(10)
+            self.user_conn_create_resp_event.pop(conn_id)
+            if not event.is_set():
+                raise Exception("timeout")
+            pkg = self.user_conn_create_resp_pkg.pop(conn_id)
+            if pkg.error != "":
+                raise Exception(pkg.error)
         except BaseException as e:
             try:
                 user_conn.shutdown(socket.SHUT_RDWR)
@@ -274,27 +280,7 @@ class Srv:
             except BaseException as e:
                 ...
             self.logger.error("wait user conn create resp err: {0}".format(e))
-            raise e
-        finally:
-            self.user_conn_create_resp_event.pop(conn_id)
-            try:
-                pkg = self.user_conn_create_resp_pkg.pop(conn_id)
-                if pkg.error != "":
-                    try:
-                        user_conn.shutdown(socket.SHUT_RDWR)
-                        user_conn.close()
-                    except BaseException as e:
-                        ...
-                    self.logger.error("wait user conn create resp pkg err: {0}".format(pkg.error))
-                    raise Exception("user conn create resp error: {0}".format(pkg.error))
-            except BaseException as e:
-                try:
-                    user_conn.shutdown(socket.SHUT_RDWR)
-                    user_conn.close()
-                except BaseException as ee:
-                    ...
-                self.logger.error("can not find user conn create resp pkg: {0}".format(e))
-                raise Exception("can not find user conn create resp pkg: {0}".format(e))
+            return
         # create user conn success
         self.conn_id_mapping_user_conn[conn_id] = user_conn
         client_app_conn = self.conn_id_mapping_client_app_conn[conn_id]
