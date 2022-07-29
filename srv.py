@@ -31,7 +31,7 @@ class Srv:
         return str(self.conf)
 
     def start(self):
-        self.logger.info("start client!")
+        self.logger.info("start server!")
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
