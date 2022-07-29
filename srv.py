@@ -23,8 +23,8 @@ class Srv:
         self.conn_id_mapping_client_app_conn = {}
         self.conn_id_mapping_user_conn = {}
         self.client_id_mapping_client_conn = {}
-        self.client_id_mapping_client_app_conn = {}
-        self.client_id_mapping_user_conn = {}
+        self.client_id_mapping_client_app_conns = {}
+        self.client_id_mapping_user_conns = {}
         self.client_id_mapping_listen_port = {}
 
     def __str__(self):
@@ -89,7 +89,7 @@ class Srv:
                 listens[listen].close()
             except BaseException as e:
                 ...
-        user_conns = self.client_id_mapping_user_conn.pop(client_id)
+        user_conns = self.client_id_mapping_user_conns.pop(client_id)
         for user_conn in user_conns:
             self.logger.info("closing user conn: {0}".format(str(user_conns[user_conn])))
             try:
@@ -97,7 +97,7 @@ class Srv:
                 user_conns[user_conn].close()
             except BaseException as e:
                 ...
-        client_app_conns = self.client_id_mapping_client_app_conn.pop(client_id)
+        client_app_conns = self.client_id_mapping_client_app_conns.pop(client_id)
         for client_app_conn in client_app_conns:
             self.logger.info("closing client app conn: {0}".format(str(client_app_conns[client_app_conn])))
             try:
@@ -123,8 +123,8 @@ class Srv:
                     self.logger.info("recv type: {0}!".format(pkg.ty))
                     client_id = self.__id__()
                     self.client_id_mapping_listen_port[client_id] = {}
-                    self.client_id_mapping_user_conn[client_id] = {}
-                    self.client_id_mapping_client_app_conn[client_id] = {}
+                    self.client_id_mapping_user_conns[client_id] = {}
+                    self.client_id_mapping_client_app_conns[client_id] = {}
                     self.client_id_mapping_client_conn[client_id] = client_conn
                     threading.Thread(target=self.__handle_client_hello_req__,
                                      args=(client_conn, client_id, pkg)).start()
@@ -176,7 +176,7 @@ class Srv:
     def __handle_user_create_conn_resp__(self, client_app_conn: socket.socket, pkg: protocol.package):
         try:
             if pkg.error == "":
-                self.client_id_mapping_client_app_conn[pkg.client_id][pkg.conn_id] = client_app_conn
+                self.client_id_mapping_client_app_conns[pkg.client_id][pkg.conn_id] = client_app_conn
                 self.conn_id_mapping_client_app_conn[pkg.conn_id] = client_app_conn
             self.user_conn_create_resp_pkg[pkg.conn_id] = pkg
             wait = self.user_conn_create_resp_event[pkg.conn_id]
@@ -184,7 +184,7 @@ class Srv:
         except BaseException as e:
             self.logger.error("can not find create user conn resp event: {0}!".format(e))
             try:
-                self.client_id_mapping_client_app_conn[pkg.client_id].pop(pkg.conn_id)
+                self.client_id_mapping_client_app_conns[pkg.client_id].pop(pkg.conn_id)
             except BaseException as ee:
                 ...
             try:
@@ -257,14 +257,13 @@ class Srv:
                 continue
             except KeyError as e:
                 try:
-                    _ = self.client_id_mapping_user_conn[self.id]
+                    _ = self.client_id_mapping_client_conn[self.id]
                     continue
                 except KeyError as e:
                     return self.id
 
     def __handle_user_conn__(self, client_conn: socket.socket, client_id: int, user_conn: socket.socket, listen_port):
         conn_id = self.__id__()
-        self.client_id_mapping_user_conn[client_id][id(user_conn)] = user_conn
         event = threading.Event()
         self.user_conn_create_resp_event[conn_id] = event
         bs = protocol.serialize(
@@ -291,6 +290,7 @@ class Srv:
             return
         # create user conn success
         self.conn_id_mapping_user_conn[conn_id] = user_conn
+        self.client_id_mapping_user_conns[client_id][id(user_conn)] = user_conn
         client_app_conn = self.conn_id_mapping_client_app_conn[conn_id]
         try:
             while 1:
@@ -306,6 +306,14 @@ class Srv:
             try:
                 client_app_conn.shutdown(socket.SHUT_RDWR)
                 client_app_conn.close()
+            except BaseException as e:
+                ...
+            try:
+                self.client_id_mapping_user_conns[client_id].pop(id(user_conn))
+            except BaseException as e:
+                ...
+            try:
+                self.client_id_mapping_client_app_conns[client_id].pop(conn_id)
             except BaseException as e:
                 ...
             try:
