@@ -223,6 +223,7 @@ class Srv:
                 listen_ports[listen_port].close()
             self._logger.error("listen port err: {}, {}".format(listen_ports, e))
             error = str(e)
+            return
         finally:
             bs = protocol.serialize(protocol.package(ty=protocol.TYPE_CLIENT_HELLO_RESP, error=error))
             client_conn.send(len(bs).to_bytes(4, 'big') + bs)
