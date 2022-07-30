@@ -317,7 +317,7 @@ class Srv:
                                                             self._server_port))
         try:
             while 1:
-                bs = user_conn.recv(1024)
+                bs = user_conn.recv(40960)
                 if len(bs) == 0:
                     raise Exception("EOF")
                 bs = protocol.serialize(

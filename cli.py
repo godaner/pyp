@@ -247,7 +247,7 @@ class Cli:
         self._conn_id_mapping_app_conn[conn_id] = app_conn
         try:
             while 1:
-                bs = app_conn.recv(1024)
+                bs = app_conn.recv(40960)
                 if len(bs) == 0:
                     raise Exception("EOF")
                 bs = protocol.serialize(
