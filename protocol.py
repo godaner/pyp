@@ -40,66 +40,77 @@ class package:
 
 
 def serialize(obj: package) -> bytes:
-    bs = bytes()
-    bs += type_map_bs[obj.ty]
-    bs += obj.client_id.to_bytes(4, 'big')
-    bs += obj.conn_id.to_bytes(4, 'big')
-    bs += len(obj.secret).to_bytes(2, 'big')
-    bs += bytes(obj.secret, encoding='utf-8')
-    bs += len(obj.error).to_bytes(2, 'big')
-    bs += bytes(obj.error, encoding='utf-8')
-    bs += len(obj.payload).to_bytes(4, 'big')
-    bs += obj.payload
-    bs += len(obj.listen_ports).to_bytes(1, 'big')
-    for listen_port in obj.listen_ports:
-        bs += listen_port.to_bytes(4, 'big')
-    return bs
+    if obj.ty == TYPE_PAYLOAD:
+        bs = bytes()
+        bs += type_map_bs[obj.ty]
+        bs += obj.conn_id.to_bytes(4, 'big')
+        bs += len(obj.payload).to_bytes(4, 'big')
+        bs += obj.payload
+        return bs
+    else:
+        bs = bytes()
+        bs += type_map_bs[obj.ty]
+        bs += obj.client_id.to_bytes(4, 'big')
+        bs += obj.conn_id.to_bytes(4, 'big')
+        bs += len(obj.secret).to_bytes(2, 'big')
+        bs += bytes(obj.secret, encoding='utf-8')
+        bs += len(obj.error).to_bytes(2, 'big')
+        bs += bytes(obj.error, encoding='utf-8')
+        bs += len(obj.listen_ports).to_bytes(1, 'big')
+        for listen_port in obj.listen_ports:
+            bs += listen_port.to_bytes(4, 'big')
+        return bs
 
 
 def un_serialize(bs) -> package:
     type_bs = bs[:1]
     bs = bs[1:]
     ty = bs_map_type[int.from_bytes(type_bs, 'big')]
-
-    client_id_bs = bs[:4]
-    bs = bs[4:]
-    client_id = int.from_bytes(client_id_bs, 'big')
-
-    conn_id_bs = bs[:4]
-    bs = bs[4:]
-    conn_id = int.from_bytes(conn_id_bs, 'big')
-
-    secret_len_bs = bs[:2]
-    bs = bs[2:]
-    secret_len = int.from_bytes(secret_len_bs, 'big')
-
-    secret_bs = bs[:secret_len]
-    bs = bs[secret_len:]
-    secret = str(secret_bs, encoding='utf-8')
-
-    error_len_bs = bs[:2]
-    bs = bs[2:]
-    error_len = int.from_bytes(error_len_bs, 'big')
-
-    error_bs = bs[:error_len]
-    bs = bs[error_len:]
-    error = str(error_bs, encoding='utf-8')
-
-    payload_len_bs = bs[:4]
-    bs = bs[4:]
-    payload_len = int.from_bytes(payload_len_bs, 'big')
-
-    payload_bs = bs[:payload_len]
-
-    listen_ports_len_bs = bs[:1]
-    bs = bs[1:]
-    listen_ports_len = int.from_bytes(listen_ports_len_bs, 'big')
-
-    listen_ports = []
-    for i in range(listen_ports_len):
-        listen_port_bs = bs[:4]
+    if ty == TYPE_PAYLOAD:
+        conn_id_bs = bs[:4]
         bs = bs[4:]
-        listen_ports.append(int.from_bytes(listen_port_bs, 'big'))
+        conn_id = int.from_bytes(conn_id_bs, 'big')
 
-    return package(ty=ty, client_id=client_id, listen_ports=listen_ports, conn_id=conn_id, error=error,
-                   payload=payload_bs, secret=secret)
+        payload_len_bs = bs[:4]
+        bs = bs[4:]
+        payload_len = int.from_bytes(payload_len_bs, 'big')
+
+        payload_bs = bs[:payload_len]
+        return package(ty=ty, conn_id=conn_id, payload=payload_bs)
+    else:
+        client_id_bs = bs[:4]
+        bs = bs[4:]
+        client_id = int.from_bytes(client_id_bs, 'big')
+
+        conn_id_bs = bs[:4]
+        bs = bs[4:]
+        conn_id = int.from_bytes(conn_id_bs, 'big')
+
+        secret_len_bs = bs[:2]
+        bs = bs[2:]
+        secret_len = int.from_bytes(secret_len_bs, 'big')
+
+        secret_bs = bs[:secret_len]
+        bs = bs[secret_len:]
+        secret = str(secret_bs, encoding='utf-8')
+
+        error_len_bs = bs[:2]
+        bs = bs[2:]
+        error_len = int.from_bytes(error_len_bs, 'big')
+
+        error_bs = bs[:error_len]
+        bs = bs[error_len:]
+        error = str(error_bs, encoding='utf-8')
+
+        listen_ports_len_bs = bs[:1]
+        bs = bs[1:]
+        listen_ports_len = int.from_bytes(listen_ports_len_bs, 'big')
+
+        listen_ports = []
+        for i in range(listen_ports_len):
+            listen_port_bs = bs[:4]
+            bs = bs[4:]
+            listen_ports.append(int.from_bytes(listen_port_bs, 'big'))
+
+        return package(ty=ty, client_id=client_id, listen_ports=listen_ports, conn_id=conn_id, error=error,
+                       secret=secret)
