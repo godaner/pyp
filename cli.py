@@ -24,16 +24,16 @@ class Cli:
         self._exit_event = threading.Event()
         try:
             self._server_host = self._conf["server"]["host"]
-        except Exception as e:
-            raise SystemExit(e)
+        except BaseException as e:
+            raise SystemExit("get server.host err: {0}".format(e))
         try:
             self._server_port = self._conf["server"]["port"]
-        except Exception as e:
-            raise SystemExit(e)
+        except BaseException as e:
+            raise SystemExit("get server.port err: {0}".format(e))
         try:
             self._secret = self._conf["server"]["secret"]
-        except Exception as e:
-            raise SystemExit(e)
+        except BaseException as e:
+            raise SystemExit("get server.secret err: {0}".format(e))
         self._listen_ports = []
         for app in self._conf['app']:
             self._outer_port_mapping_inner[app['outer']['port']] = app['inner']

@@ -27,16 +27,16 @@ class Srv:
         self._client_id_mapping_listen_port = {}
         try:
             self._server_host = self._conf["server"]["host"]
-        except Exception as e:
-            raise SystemExit(e)
+        except BaseException as e:
+            raise SystemExit("get server.host err: {0}".format(e))
         try:
             self._server_port = self._conf["server"]["port"]
-        except Exception as e:
-            raise SystemExit(e)
+        except BaseException as e:
+            raise SystemExit("get server.port err: {0}".format(e))
         try:
             self._secret = self._conf["server"]["secret"]
-        except Exception as e:
-            raise SystemExit(e)
+        except BaseException as e:
+            raise SystemExit("get server.secret err: {0}".format(e))
 
     def __str__(self):
         return str(self._conf)
