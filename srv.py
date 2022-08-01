@@ -109,8 +109,6 @@ class Srv:
                 if len(len_bs) == 0:
                     raise Exception("EOF")
                 len_int = int.from_bytes(len_bs, 'big')
-                if len_int == 0:
-                    continue
                 bs = sock.recv_full(client_conn, len_int)
                 self._logger.debug("recv len: {0}, len(bs): {1}".format(len_int, len(bs)))
                 pkg = protocol.un_serialize(bs)
